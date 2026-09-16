@@ -10,7 +10,7 @@ import {
   Plus, PlusCircle, Edit, Trash2, Check, Utensils, ShoppingBag, Film, Car, Sparkles, Coffee,
   Briefcase, Gift, Heart, Home, Laptop, Dumbbell, Plane, Users, Phone, HelpCircle, Tag, X,
   Cloud, CloudUpload, CloudDownload, Image as ImageIcon, Eye, ExternalLink, Calendar, TrendingUp,
-  Beer, Flame, Train, PiggyBank, Database, RefreshCw, EyeOff, FolderCog
+  Beer, Flame, Train, PiggyBank, Database, RefreshCw, EyeOff, FolderCog, Smartphone, Zap
 } from 'lucide-react';
 
 import {
@@ -62,6 +62,7 @@ interface BudgetSettingsProps {
   onOpenCategoryManager?: () => void;
   openAddOnLaunch?: boolean;
   onOpenAddOnLaunchChange?: (val: boolean) => void;
+  onOpenWalletSync?: () => void;
 }
 
 // Preset color themes mapping named choices to background text pairings
@@ -151,7 +152,8 @@ export function BudgetSettings({
   onWipeCloudDatabase,
   onOpenCategoryManager,
   openAddOnLaunch = true,
-  onOpenAddOnLaunchChange
+  onOpenAddOnLaunchChange,
+  onOpenWalletSync
  }: BudgetSettingsProps) {
   const [previewAsset, setPreviewAsset] = useState<{ name: string; url: string } | null>(null);
   const [renderCharts, setRenderCharts] = useState(false);
@@ -796,6 +798,39 @@ export function BudgetSettings({
                 }`}
               />
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Wallet & Notification Auto-Post Sync Card */}
+      <div className="bg-gradient-to-r from-emerald-950/30 via-slate-900 to-black text-slate-100 rounded-xl p-3.5 border border-emerald-500/20 shadow-xs animate-in fade-in duration-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex-1 min-w-0 pr-2 space-y-1">
+            <div className="flex items-center gap-2">
+              <Smartphone size={15} className="text-emerald-400 shrink-0" />
+              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-widest font-sans">
+                Wallet & SMS Notification Sync
+              </h4>
+              <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.2 rounded-full border border-emerald-500/30">
+                Auto-Detect
+              </span>
+            </div>
+            <p className="text-[10.5px] text-slate-400 leading-relaxed">
+              Auto-detect transactions from Google Wallet, Apple Wallet, Samsung Wallet & bank SMS alerts. Categorize new retailers and auto-post future transactions.
+            </p>
+          </div>
+
+          <div className="shrink-0">
+            {onOpenWalletSync && (
+              <button
+                type="button"
+                onClick={onOpenWalletSync}
+                className="w-full sm:w-auto py-2 px-3.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-950/30 border-0"
+              >
+                <Zap size={13} className="fill-current" />
+                <span>Configure Sync & Rules</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

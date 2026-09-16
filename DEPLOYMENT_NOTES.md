@@ -107,5 +107,23 @@ VITE_LEMON_SQUEEZY_STORE_URL="https://loosebudget.lemonsqueezy.com/my-orders"
 ```
 When a user taps **"Activate $1.00 Trial"**, **"Get Monthly"**, or **"Get Yearly"** in LooseBudget, it opens their secure checkout instantly!
 
+---
+
+## 🤖 Step 5: Android APK Build & Native Auto-Detection
+
+### **Why an APK?**
+Web browsers (PWAs) cannot listen to background OS notifications due to Android browser sandboxes. Packaging LooseBudget as an Android APK (using Capacitor) unlocks:
+1. **Zero-Setup Background Capture:** `WalletNotificationService` catches Google Wallet tap-to-pay, Samsung Wallet, and banking notifications automatically.
+2. **1-Tap Permission:** Replaces all complex webhooks and third-party tools with a single Android Settings toggle.
+3. **Smart 5-Minute Deduplication:** Prevents double-counting when both Google Wallet and your bank send simultaneous alerts for a single transaction.
+4. **Direct Website Distribution:** Distributed directly from `loosebudget.com` as an APK download, bypassing Google Play's 30% cut and retaining Lemon Squeezy billing.
+5. **Seamless Cross-Device Sync:** Mobile APK and Desktop web use the exact same Firebase Auth and Firestore backend, synchronizing transactions instantly.
+
+### **Automated APK Build via GitHub Actions**
+When you push code to GitHub:
+- `/.github/workflows/build-apk.yml` builds `app-release-unsigned.apk` automatically under your repository's **Actions** tab.
+- Download the APK, host it on your landing page (e.g. `loosebudget.com/download/loosebudget.apk`), and users can install it on any Android device!
+
+
 
 

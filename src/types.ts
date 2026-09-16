@@ -66,3 +66,45 @@ export interface AccentTheme {
   };
 }
 
+export type WalletSource = 'google_wallet' | 'apple_wallet' | 'samsung_wallet' | 'sms_bank' | 'other_app';
+
+export interface VendorRule {
+  id: string;
+  vendorPattern: string; // normalized lowercase search key (e.g. "starbucks", "trader joe's")
+  displayName: string;   // clean display name (e.g. "Starbucks")
+  categoryId: string;    // ID of the assigned category
+  autoPost: boolean;     // true: auto-post future transactions; false: ask for review
+  createdAt: number;
+  updatedAt: number;
+  lastAmount?: number;
+  totalCount: number;
+}
+
+export interface DetectedNotification {
+  id: string;
+  rawText: string;
+  vendor: string;
+  amount: number;
+  currency?: string;
+  date: string; // YYYY-MM-DD
+  source: WalletSource;
+  appName?: string;
+  status: 'pending_first_time' | 'auto_posted' | 'manually_approved' | 'ignored';
+  assignedCategoryId?: string;
+  detectedAt: number;
+  expenseId?: string;
+}
+
+export interface WalletSyncSettings {
+  enabled: boolean;
+  webhookToken: string;
+  monitorGoogleWallet: boolean;
+  monitorAppleWallet: boolean;
+  monitorSamsungWallet: boolean;
+  monitorBankApps?: boolean;
+  monitorSms: boolean;
+  duplicateProtection?: boolean;
+  monitoredApps: string[]; // custom apps, e.g. "Chase", "Amex", "Bank of America"
+  autoCheckClipboard: boolean;
+}
+

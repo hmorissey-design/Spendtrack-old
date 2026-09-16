@@ -1,0 +1,73 @@
+=========================================
+LOOSEBUDGET - USER HELP & GUIDE text file
+=========================================
+
+Instructions: Feel free to edit any of the text blocks below.
+When you are done, save the file and send the text back in the chat!
+
+Welcome to LooseBudget! This application operates completely offline and saves all data locally on your device for absolute privacy. Use this guide to master each section of the app.
+
+-----------------------------------------
+1. Dashboard
+-----------------------------------------
+Your Main page for tracking budgets, how fast your're spending, and taking quick actions.
+
+* Monthly Spending Gauge: A circular tracker showing the percentage of the budget spent. It automatically displays different colors according to your status (green for safe, yellow for warning, red for over-budget).
+* Discretionary Limits: Compares total spent against any budget you've assigned that category.
+* Pacing Alerts: Monitors spending throughout the month. If you are spending too fast compared to the point you are in the month, a caution message will display.
+* Category Bars: Displays individual category totals. Click any bar to instantly switch to the History tab to see just the transactions for that category.
+* NOTE on Business Expenses: Purchases categorized as Business Expenses are treated as reimbursable. They do not deduct from your personal monthly spending, allowing easy tracking and reporting of them without impacting your personal spending information.
+
+-----------------------------------------
+2. History
+-----------------------------------------
+Review, manage, search, and export your entire chronological expense ledger.
+
+* Modifying Records: Tap the pencil (Edit) icon to update any transaction, or tap the trash (Delete) icon to erase history.
+* Multi-Channel Filter Bar: Search transaction notes instantly. Refine your list by choosing specific categories or payment methods. (Cash, Card, Digital Wallet, Other). Payment methods are entirely optional and only there to allow you to track if you wish.
+* Custom Date Range Calendars: By default the transactions shown are in the month that is currently showing on the top. If you want to see a specific date or range of dates you can tap the Start Date or End Date fields to open calendar picker dropdowns. Filter your list between custom days across different months. 
+ 
+* Excel / CSV Spreadsheet Export: Click the CSV button to download your filtered transactions directly to open in Excel, Numbers, or Google Sheets.
+
+* Audit-Ready PDF Statements: Click the PDF button to create a report for your own purposes or to submit for Business Expense reimbursements or records.
+
+-----------------------------------------
+3. Analytics
+-----------------------------------------
+Visual dashboards analyzing your monthly monetary trends and spend characteristics.
+
+* Category Spending Chart: An interactive pie chart displaying proportions of expenditures. Hover to view precise sums, or click category segments to filter those transactions.
+* Spending Progress Pacing: A dynamic cumulative line chart pacing your expenditure curve against your set monthly boundary. Pre-allocates active boundaries and conceals upcoming future days.
+* Daily Expenditure Spikes: Bar charts modeling daily spikes, signaling large transaction days.
+
+-----------------------------------------
+4. Settings
+-----------------------------------------
+Create or Edit categories, budgets and other preferences.
+
+* Set category Budgets if you desire: The App will let you know how much of the individual category budgets, and your total monthly budget if remaining.
+* Custom Category Manager: Create, edit, and delete spending categories with chosen icons, custom colors, and targeted individual budgets.
+* Currency Symbols: Select the currency symbol you wish to use if not the default $ (e.g., $, €, £, ¥, ₹).
+* BACKUP and RESTORE to your device only 
+* GOOGLE DRIVE BACKUP if you wish to save your data in your own personal Drive.
+* Reset Data: Delete all local states to return the database to a fresh, empty install.
+
+-----------------------------------------
+5. Add or Edit New Transaction Screen
+-----------------------------------------
+When in the Add Edit Transaction Screen you can adjust the order the Category icons are displayed according to your preference. Just Click on the "Arrange Icons" and proceed to drag and drop the icons into the order you prefer. Click on "Done Arranging" when you have finished. 
+
+If you don't choose a category the app will assign the expense to Uncategorized. You can change it later if you wish or, if you are just tracking your overall spending and not specific categories, you can leave it as Uncategorized. 
+
+Note that the Description field is optional EXCEPT for Business Expenses. 
+
+-----------------------------------------
+6. General Help
+-----------------------------------------
+
+* Menu Navigation: Move seamlessly between screens using the bottom navigation menu bar.
+
+-----------------------------------------
+Privacy & Data Deletion
+-----------------------------------------
+LooseBudget is offline-first. We do not transfer, collect, or store your finance logs on external servers. All transactions reside strictly on your device. You can instantly erase your local files at any time from the Settings tab by clicking "Reset All Data". If you created backups in Google Drive, those files are securely held inside your personal cloud storage where you can delete them at your own discretion.

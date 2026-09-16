@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.hmorisseydesign.expensetrack",
+      "sha256_cert_fingerprints": [
+        "8D:4A:08:C9:B8:3B:0F:19:B2:0C:21:60:E2:75:49:83:D1:7C:9B:41:46:FD:B2:CA:54:68:61:CE:17:84:1E:C2"
+      ]
+    }
+  }
+]

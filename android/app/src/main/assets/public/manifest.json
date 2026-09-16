@@ -1,0 +1,52 @@
+{
+  "short_name": "LooseBudget",
+  "name": "LooseBudget - Monthly Budget & Expense Reconciliation",
+  "description": "Smart, visual budget tracker and savings reconciliation companion.",
+  "icons": [
+    {
+      "src": "icon-192.jpg",
+      "type": "image/jpeg",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.jpg",
+      "type": "image/jpeg",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "icon.jpg",
+      "type": "image/jpeg",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    }
+  ],
+  "start_url": "./",
+  "scope": "./",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "display": "standalone",
+  "orientation": "portrait",
+  "id": "loosebudget-app",
+  "shortcuts": [
+    {
+      "name": "Add Expense",
+      "short_name": "Add",
+      "description": "Quickly record a new transaction",
+      "url": "./?action=add",
+      "icons": [
+        {
+          "src": "icon-192.jpg",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

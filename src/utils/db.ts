@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Expense, Category, MonthlyBudget } from '../types';
+import { Expense, Category, MonthlyBudget, VendorRule, DetectedNotification, WalletSyncSettings } from '../types';
 import { auth } from '../firebase';
 import { CloudDb, SyncQueue } from './cloudDb';
 
@@ -989,5 +989,148 @@ export const LocalDb = {
     if (auth.currentUser) {
       CloudDb.saveUserProfileToCloud(auth.currentUser.uid, { currencySymbol: symbol }).catch(e => console.error(e));
     }
+  },
+
+  // VENDOR AUTO-POST RULES METHODS
+  getVendorRules(): VendorRule[] {
+    const data = localStorage.getItem('expensetrack_vendor_rules');
+    if (!data) return [];
+    try {
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  saveVendorRules(rules: VendorRule[]): void {
+    localStorage.setItem('expensetrack_vendor_rules', JSON.stringify(rules));
+  },
+
+  findVendorRule(vendorName: string): VendorRule | null {
+    if (!vendorName) return null;
+    const rules = this.getVendorRules();
+    const normalized = vendorName.toLowerCase().trim();
+
+    // 1. Exact pattern match
+    let found = rules.find(r => r.vendorPattern === normalized);
+    if (found) return found;
+
+    // 2. Substring or includes match (e.g. "starbucks #12" matches rule "starbucks")
+    found = rules.find(r => normalized.includes(r.vendorPattern) || r.vendorPattern.includes(normalized));
+    return found || null;
+  },
+
+  saveVendorRule(rule: Partial<VendorRule> & { vendorPattern: string; displayName: string; categoryId: string; autoPost: boolean }): VendorRule {
+    const rules = this.getVendorRules();
+    const normalizedKey = rule.vendorPattern.toLowerCase().trim();
+    const now = Date.now();
+
+    const existingIdx = rules.findIndex(r => r.vendorPattern === normalizedKey || (rule.id && r.id === rule.id));
+
+    let updatedRule: VendorRule;
+
+    if (existingIdx !== -1) {
+      updatedRule = {
+        ...rules[existingIdx],
+        ...rule,
+        vendorPattern: normalizedKey,
+        updatedAt: now
+      };
+      rules[existingIdx] = updatedRule;
+    } else {
+      updatedRule = {
+        id: rule.id || `vrule_${now}_${Math.random().toString(36).substr(2, 7)}`,
+        vendorPattern: normalizedKey,
+        displayName: rule.displayName.trim(),
+        categoryId: rule.categoryId,
+        autoPost: rule.autoPost,
+        totalCount: rule.totalCount || 1,
+        lastAmount: rule.lastAmount,
+        createdAt: now,
+        updatedAt: now
+      };
+      rules.unshift(updatedRule);
+    }
+
+    this.saveVendorRules(rules);
+    return updatedRule;
+  },
+
+  deleteVendorRule(id: string): void {
+    const rules = this.getVendorRules().filter(r => r.id !== id);
+    this.saveVendorRules(rules);
+  },
+
+  recordVendorUsage(vendorName: string, amount: number): void {
+    const rules = this.getVendorRules();
+    const normalized = vendorName.toLowerCase().trim();
+    const idx = rules.findIndex(r => r.vendorPattern === normalized || normalized.includes(r.vendorPattern));
+    if (idx !== -1) {
+      rules[idx] = {
+        ...rules[idx],
+        totalCount: (rules[idx].totalCount || 0) + 1,
+        lastAmount: amount,
+        updatedAt: Date.now()
+      };
+      this.saveVendorRules(rules);
+    }
+  },
+
+  // WALLET & NOTIFICATION SYNC SETTINGS
+  getWalletSyncSettings(): WalletSyncSettings {
+    const data = localStorage.getItem('expensetrack_wallet_sync_settings');
+    const defaultSettings: WalletSyncSettings = {
+      enabled: true,
+      webhookToken: 'wb_' + Math.random().toString(36).substr(2, 9),
+      monitorGoogleWallet: true,
+      monitorAppleWallet: true,
+      monitorSamsungWallet: true,
+      monitorBankApps: true,
+      monitorSms: true,
+      duplicateProtection: true,
+      monitoredApps: ['Google Wallet', 'Apple Pay', 'Samsung Pay', 'Chase', 'Amex', 'Bank of America'],
+      autoCheckClipboard: true
+    };
+
+    if (!data) {
+      localStorage.setItem('expensetrack_wallet_sync_settings', JSON.stringify(defaultSettings));
+      return defaultSettings;
+    }
+
+    try {
+      return { ...defaultSettings, ...JSON.parse(data) };
+    } catch (e) {
+      return defaultSettings;
+    }
+  },
+
+  saveWalletSyncSettings(settings: WalletSyncSettings): void {
+    localStorage.setItem('expensetrack_wallet_sync_settings', JSON.stringify(settings));
+  },
+
+  // DETECTED NOTIFICATIONS LOG
+  getDetectedNotifications(): DetectedNotification[] {
+    const data = localStorage.getItem('expensetrack_detected_notifications');
+    if (!data) return [];
+    try {
+      const parsed = JSON.parse(data);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  },
+
+  saveDetectedNotification(item: DetectedNotification): void {
+    const list = this.getDetectedNotifications();
+    // Keep max 50 recent items
+    const filtered = list.filter(n => n.id !== item.id);
+    filtered.unshift(item);
+    if (filtered.length > 50) filtered.pop();
+    localStorage.setItem('expensetrack_detected_notifications', JSON.stringify(filtered));
+  },
+
+  clearDetectedNotifications(): void {
+    localStorage.removeItem('expensetrack_detected_notifications');
   }
 };

@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Category, Expense } from '../types';
-import { Plus, X, Calendar, DollarSign, MessageSquare, CreditCard, Sparkles, Check } from 'lucide-react';
+import { Plus, X, Calendar, DollarSign, MessageSquare, CreditCard, Sparkles, Check, Smartphone } from 'lucide-react';
 import { renderCategoryIcon } from './BudgetSettings';
 
 interface ExpenseFormProps {
@@ -16,6 +16,7 @@ interface ExpenseFormProps {
   defaultCategoryId?: string;
   expenseToEdit?: Expense;
   onOpenCategoryManager?: () => void;
+  onOpenWalletSync?: () => void;
 }
 
 const getLocalYYYYMMDD = () => {
@@ -39,7 +40,7 @@ const getDarkTextColor = (colorStr: string) => {
   return 'text-slate-800';
 };
 
-export function ExpenseForm({ categories, savingsGoals, onSubmit, onClose, defaultCategoryId, expenseToEdit, onOpenCategoryManager }: ExpenseFormProps) {
+export function ExpenseForm({ categories, savingsGoals, onSubmit, onClose, defaultCategoryId, expenseToEdit, onOpenCategoryManager, onOpenWalletSync }: ExpenseFormProps) {
   const [amount, setAmount] = useState<string>(expenseToEdit ? expenseToEdit.amount.toString() : '');
   const [selectedCategory, setSelectedCategory] = useState<string>(
     expenseToEdit 
@@ -357,6 +358,27 @@ export function ExpenseForm({ categories, savingsGoals, onSubmit, onClose, defau
       {errorCode && (
         <div className="mb-2.5 p-2 bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs rounded-lg flex items-start gap-1.5 font-sans">
           <span>⚠️ {errorCode}</span>
+        </div>
+      )}
+
+      {!expenseToEdit && onOpenWalletSync && (
+        <div className="mb-2.5 flex items-center justify-between bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-500/20 rounded-xl px-3 py-1.5 shadow-xs">
+          <div className="flex items-center gap-2 min-w-0 pr-1">
+            <Smartphone size={13} className="text-emerald-400 shrink-0" />
+            <span className="text-[10px] text-slate-300 truncate">
+              Detect from Google/Apple Wallet or Bank SMS
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (onClose) onClose();
+              onOpenWalletSync();
+            }}
+            className="text-[9px] font-mono font-black text-emerald-350 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 px-2 py-0.5 rounded-md transition-all cursor-pointer shrink-0 uppercase tracking-wider"
+          >
+            Auto-Detect ⚡
+          </button>
         </div>
       )}
 

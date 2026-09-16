@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">LooseBudget</string>
+    <string name="title_activity_main">LooseBudget</string>
+    <string name="package_name">com.loosebudget.app</string>
+    <string name="custom_url_scheme">com.loosebudget.app</string>
+</resources>

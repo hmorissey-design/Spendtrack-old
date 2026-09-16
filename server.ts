@@ -119,6 +119,209 @@ app.post("/api/check-subscription-email", async (req: any, res: any) => {
   }
 });
 
+// In-memory queue for incoming notifications from iOS Shortcuts / Android Tasker / Webhooks
+interface IngestedNotificationItem {
+  id: string;
+  vendor: string;
+  amount: number;
+  currency: string;
+  date: string;
+  source: string;
+  appName: string;
+  rawText: string;
+  token?: string;
+  receivedAt: number;
+}
+
+const pendingNotificationsQueue: IngestedNotificationItem[] = [];
+
+// Helper parser for server-side webhook payloads
+function serverParseNotificationText(text: string, sourceHint?: string) {
+  if (!text || typeof text !== "string") return null;
+  const trimmed = text.trim();
+  const today = new Date().toISOString().split("T")[0];
+
+  // Check if JSON
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const data = JSON.parse(trimmed);
+      const amount = parseFloat(data.amount || data.value || data.total);
+      const vendor = data.vendor || data.merchant || data.payee || data.name;
+      if (!isNaN(amount) && amount > 0 && vendor) {
+        return {
+          vendor: String(vendor).trim(),
+          amount: Math.abs(amount),
+          currency: data.currency || "$",
+          date: data.date || today,
+          source: data.source || sourceHint || "apple_wallet",
+          appName: data.appName || "Wallet Webhook"
+        };
+      }
+    } catch (e) {}
+  }
+
+  // Detect source
+  let source = sourceHint || "sms_bank";
+  let appName = "Phone Notification";
+  const lower = trimmed.toLowerCase();
+  if (lower.includes("google wallet") || lower.includes("google pay") || lower.includes("gpay")) {
+    source = "google_wallet";
+    appName = "Google Wallet";
+  } else if (lower.includes("apple wallet") || lower.includes("apple pay") || lower.includes("apple card")) {
+    source = "apple_wallet";
+    appName = "Apple Wallet";
+  } else if (lower.includes("samsung wallet") || lower.includes("samsung pay")) {
+    source = "samsung_wallet";
+    appName = "Samsung Wallet";
+  } else if (lower.includes("chase") || lower.includes("wells fargo") || lower.includes("bank of america") || lower.includes("amex") || lower.includes("citi")) {
+    source = "sms_bank";
+    appName = "Bank SMS";
+  }
+
+  // Extract amount
+  const amountRegex = /(?:(\$|USD|CAD|EUR|GBP|€|£)\s*(\d+(?:[.,]\d{2})?)|(\d+(?:[.,]\d{2})?)\s*(\$|USD|CAD|EUR|GBP|€|£))/i;
+  const amountMatch = trimmed.match(amountRegex);
+  let rawAmount = 0;
+  let currency = "$";
+
+  if (amountMatch) {
+    if (amountMatch[2]) {
+      currency = amountMatch[1];
+      rawAmount = parseFloat(amountMatch[2].replace(",", "."));
+    } else if (amountMatch[3]) {
+      currency = amountMatch[4];
+      rawAmount = parseFloat(amountMatch[3].replace(",", "."));
+    }
+  } else {
+    const fallbackNum = trimmed.match(/\b(\d+\.\d{2})\b/);
+    if (fallbackNum) rawAmount = parseFloat(fallbackNum[1]);
+  }
+
+  if (isNaN(rawAmount) || rawAmount <= 0) return null;
+
+  // Extract vendor
+  let rawVendor = "";
+  const atMatch = trimmed.match(/(?:at|with)\s+([A-Za-z0-9\s'&.*#\-]+?)(?:\s+on|\s+with|\s+for|\s+card|\s+ending|\.|\,|$)/i);
+  const toMatch = trimmed.match(/(?:paid|sent|transfer(?:red)? to)\s+(?:(?:\$|\w+)?\s*\d+(?:\.\d{2})?\s*(?:to\s+)?)?([A-Za-z0-9\s'&.*#\-]+?)(?:\s+with|\s+using|\s+on|\s+from|\.|\,|$)/i);
+  const fromMatch = trimmed.match(/(?:charge|transaction|purchase)\s+from\s+([A-Za-z0-9\s'&.*#\-]+?)(?:\s+for|\s+on|\.|\,|$)/i);
+  const prefixMatch = trimmed.match(/(?:Google Wallet|Google Pay|Apple Pay|Samsung Pay|Samsung Wallet):\s*(?:Paid\s*)?([A-Za-z0-9\s'&.*#\-]+?)(?:\s+for|\s+\$|\s*\d|\.|\,|$)/i);
+
+  if (atMatch && atMatch[1]?.trim()) {
+    rawVendor = atMatch[1];
+  } else if (toMatch && toMatch[1]?.trim()) {
+    rawVendor = toMatch[1];
+  } else if (fromMatch && fromMatch[1]?.trim()) {
+    rawVendor = fromMatch[1];
+  } else if (prefixMatch && prefixMatch[1]?.trim()) {
+    rawVendor = prefixMatch[1];
+  } else {
+    rawVendor = "Unknown Merchant";
+  }
+
+  let vendor = rawVendor.replace(/^(sq\s*\*|tst\s*\*|sp\s*\*|paypal\s*\*|amzn\s*mktp\s*\*)/i, "").trim();
+  vendor = vendor.replace(/#\s*\d+/g, "").trim();
+
+  return {
+    vendor: vendor || "Merchant",
+    amount: rawAmount,
+    currency: currency || "$",
+    date: today,
+    source,
+    appName
+  };
+}
+
+// API Route: Ingest notification from iOS Shortcuts, Android Tasker, or webhook
+app.post("/api/notifications/ingest", (req: any, res: any) => {
+  try {
+    const payload = req.body || {};
+    const rawText = String(payload.text || payload.message || payload.notification || req.query.text || "").trim();
+    const token = String(payload.token || req.query.token || req.headers["x-sync-token"] || "").trim();
+    const sourceHint = String(payload.source || req.query.source || "");
+
+    let parsedItem: IngestedNotificationItem | null = null;
+
+    if (payload.amount && (payload.vendor || payload.merchant)) {
+      // Structured payload
+      parsedItem = {
+        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        vendor: String(payload.vendor || payload.merchant).trim(),
+        amount: Math.abs(parseFloat(payload.amount)),
+        currency: String(payload.currency || "$"),
+        date: String(payload.date || new Date().toISOString().split("T")[0]),
+        source: String(payload.source || "other_app"),
+        appName: String(payload.appName || "Webhook"),
+        rawText: rawText || `Direct webhook for ${payload.vendor}: $${payload.amount}`,
+        token,
+        receivedAt: Date.now()
+      };
+    } else if (rawText) {
+      const parsed = serverParseNotificationText(rawText, sourceHint);
+      if (parsed) {
+        parsedItem = {
+          id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          vendor: parsed.vendor,
+          amount: parsed.amount,
+          currency: parsed.currency,
+          date: parsed.date,
+          source: parsed.source,
+          appName: parsed.appName,
+          rawText,
+          token,
+          receivedAt: Date.now()
+        };
+      }
+    }
+
+    if (!parsedItem) {
+      return res.status(400).json({
+        error: "Could not detect a valid transaction amount and vendor in the provided text or payload.",
+        receivedText: rawText
+      });
+    }
+
+    // Push into queue, keep last 50
+    pendingNotificationsQueue.unshift(parsedItem);
+    if (pendingNotificationsQueue.length > 50) {
+      pendingNotificationsQueue.pop();
+    }
+
+    console.log(`📱 Ingested Notification: ${parsedItem.vendor} ($${parsedItem.amount}) via ${parsedItem.source}`);
+    return res.status(200).json({
+      success: true,
+      notification: parsedItem
+    });
+  } catch (error: any) {
+    console.error("❌ Error ingesting notification:", error);
+    return res.status(500).json({ error: "Internal server error ingesting notification" });
+  }
+});
+
+// API Route: Poll pending ingested notifications
+app.get("/api/notifications/pending", (req: any, res: any) => {
+  const token = String(req.query.token || req.headers["x-sync-token"] || "").trim();
+  const items = token
+    ? pendingNotificationsQueue.filter(item => !item.token || item.token === token)
+    : pendingNotificationsQueue;
+
+  return res.status(200).json({
+    count: items.length,
+    notifications: items
+  });
+});
+
+// API Route: Acknowledge / clear notification
+app.post("/api/notifications/ack", (req: any, res: any) => {
+  const { id } = req.body || {};
+  if (id) {
+    const idx = pendingNotificationsQueue.findIndex(item => item.id === id);
+    if (idx !== -1) {
+      pendingNotificationsQueue.splice(idx, 1);
+    }
+  }
+  return res.status(200).json({ success: true });
+});
+
 // Vite Middleware & Static File Handling
 async function start() {
   if (process.env.NODE_ENV !== "production") {

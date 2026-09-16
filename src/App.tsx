@@ -43,11 +43,14 @@ import {
   ArrowLeft,
   RefreshCw,
   Lock,
-  Cloud
+  Cloud,
+  Smartphone,
+  Zap,
+  Bell
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 
-import { ActiveTab, Expense, Category, MonthlyBudget, SubscriptionState } from './types';
+import { ActiveTab, Expense, Category, MonthlyBudget, SubscriptionState, VendorRule, DetectedNotification, WalletSource } from './types';
 import { LocalDb, DEFAULT_CATEGORIES, DEFAULT_INCOME_STREAMS, DEFAULT_FIXED_EXPENSES, DEFAULT_SAVINGS_GOALS } from './utils/db';
 import { getLoadedAccentThemeId, applyAccentTheme } from './utils/theme';
 import { SubscriptionManager } from './utils/subscription';
@@ -58,6 +61,11 @@ import { BudgetSettings, renderCategoryIcon } from './components/BudgetSettings'
 import { CategoryManager } from './components/CategoryManager';
 import { AuthModal } from './components/AuthModal';
 import { SubscriptionModal } from './components/SubscriptionModal';
+import { FirstTimeVendorModal } from './components/FirstTimeVendorModal';
+import { WalletSyncModal } from './components/WalletSyncModal';
+import { parseNotificationText, suggestCategoryForVendor } from './utils/notificationParser';
+import { NativeWalletBridge } from './utils/nativeWalletBridge';
+import { TransactionDeduplicator } from './utils/deduplication';
 import { HelpSection } from './components/HelpSection';
 import { auth, onAuthStateChanged, User } from './firebase';
 import { CloudDb, SyncQueue } from './utils/cloudDb';
@@ -334,6 +342,28 @@ export default function App() {
   // Firebase Auth & Cloud Sync states
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+
+  // Digital Wallet & Notification Monitoring states
+  const [showWalletSyncModal, setShowWalletSyncModal] = useState<boolean>(false);
+  const [firstTimeVendorData, setFirstTimeVendorData] = useState<{
+    vendorName: string;
+    amount: number;
+    currencySymbol?: string;
+    source: WalletSource;
+    appName?: string;
+    date?: string;
+    suggestedCategoryId: string;
+    rawText: string;
+    notifId?: string;
+  } | null>(null);
+
+  const [autoPostToast, setAutoPostToast] = useState<{
+    message: string;
+    vendor: string;
+    amount: number;
+    categoryName: string;
+    expenseId: string;
+  } | null>(null);
 
   // Developer Secret Shortcut: 5 quick taps on logo toggles PRO / Trial state & Dev Mode
   const logoTapCountRef = useRef<number>(0);
@@ -1560,6 +1590,300 @@ Date: ${new Date().toLocaleString()}
     setShowAddForm(false);
   };
 
+  // Process raw payment notification text (from Native Android, Webhook polling, or manual simulator/paste)
+  const handleProcessNotification = (
+    rawText: string,
+    sourceHint?: WalletSource,
+    remoteItem?: any
+  ) => {
+    const parsed = parseNotificationText(rawText, sourceHint);
+    if (!parsed) {
+      console.warn('Could not parse transaction notification:', rawText);
+      return;
+    }
+
+    // 1. Smart 5-Minute Deduplication Check (e.g. Google Wallet + Bank SMS both firing)
+    const dupCheck = TransactionDeduplicator.checkDuplicate(parsed.amount, parsed.vendor, parsed.source);
+    if (dupCheck.isDuplicate) {
+      console.log('Deduplication hit:', dupCheck.reason);
+      
+      // Acknowledge remote item if it came from server queue
+      if (remoteItem?.id) {
+        fetch('/api/notifications/ack', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: remoteItem.id })
+        }).catch(() => {});
+      }
+
+      // Log in audit trail as duplicate
+      LocalDb.saveDetectedNotification({
+        id: `notif_dup_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        rawText,
+        vendor: parsed.vendor,
+        amount: parsed.amount,
+        currency: parsed.currency || currencySymbol,
+        date: parsed.date || new Date().toISOString().split('T')[0],
+        source: parsed.source,
+        appName: parsed.appName,
+        status: 'ignored',
+        assignedCategoryId: 'duplicate',
+        detectedAt: Date.now()
+      });
+
+      // Show deduplication toast notification
+      setAutoPostToast({
+        message: `🛡️ Duplicate Filtered: ${parsed.vendor} (${currencySymbol}${parsed.amount.toFixed(2)}) was already captured ${dupCheck.timeDiffSeconds}s ago via ${dupCheck.matchedTransaction?.source || 'another alert'}.`,
+        vendor: parsed.vendor,
+        amount: parsed.amount,
+        categoryName: 'Duplicate Shield',
+        expenseId: 'duplicate'
+      });
+
+      setTimeout(() => {
+        setAutoPostToast(prev => prev?.expenseId === 'duplicate' ? null : prev);
+      }, 6000);
+
+      return;
+    }
+
+    // Check if we already have a vendor rule configured
+    const existingRule = LocalDb.findVendorRule(parsed.vendor);
+
+    if (existingRule && existingRule.autoPost) {
+      // Rule exists AND auto-post is enabled: directly log expense!
+      const targetCat = categories.find(c => c.id === existingRule.categoryId) || categories[0];
+      const targetCatName = targetCat ? targetCat.name : 'Category';
+      const expenseDate = parsed.date || new Date().toISOString().split('T')[0];
+
+      const newExpenseData: Omit<Expense, 'id' | 'createdAt'> = {
+        amount: parsed.amount,
+        category: existingRule.categoryId,
+        date: expenseDate,
+        note: `${existingRule.displayName} (${parsed.appName || 'Wallet Sync'})`,
+        paymentMethod: 'digital_wallet'
+      };
+
+      const added = LocalDb.addExpense(newExpenseData);
+      LocalDb.recordVendorUsage(existingRule.displayName, parsed.amount);
+
+      // Record in deduplicator fingerprint cache
+      TransactionDeduplicator.recordTransaction({
+        amount: parsed.amount,
+        currency: parsed.currency || currencySymbol,
+        vendor: existingRule.displayName,
+        source: parsed.source,
+        expenseId: added.id,
+        rawText
+      });
+
+      LocalDb.saveDetectedNotification({
+        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        rawText,
+        vendor: existingRule.displayName,
+        amount: parsed.amount,
+        currency: parsed.currency || currencySymbol,
+        date: expenseDate,
+        source: parsed.source,
+        appName: parsed.appName,
+        status: 'auto_posted',
+        assignedCategoryId: existingRule.categoryId,
+        detectedAt: Date.now(),
+        expenseId: added.id
+      });
+
+      // Acknowledge remote item if it came from server queue
+      if (remoteItem?.id) {
+        fetch('/api/notifications/ack', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: remoteItem.id })
+        }).catch(() => {});
+      }
+
+      loadDatabaseState(selectedMonth);
+
+      // Show auto-post toast with instant Undo action
+      setAutoPostToast({
+        message: `⚡ Auto-Posted ${currencySymbol}${parsed.amount.toFixed(2)} at ${existingRule.displayName} to ${targetCatName}`,
+        vendor: existingRule.displayName,
+        amount: parsed.amount,
+        categoryName: targetCatName,
+        expenseId: added.id
+      });
+
+      setTimeout(() => {
+        setAutoPostToast(prev => prev?.expenseId === added.id ? null : prev);
+      }, 7000);
+    } else {
+      // First time vendor OR autoPost was disabled by user: Prompt user to set category & auto-post choice
+      const suggestedCategory = existingRule 
+        ? existingRule.categoryId 
+        : suggestCategoryForVendor(parsed.vendor, categories);
+
+      setFirstTimeVendorData({
+        vendorName: existingRule?.displayName || parsed.vendor,
+        amount: parsed.amount,
+        currencySymbol: parsed.currency || currencySymbol,
+        source: parsed.source,
+        appName: parsed.appName,
+        date: parsed.date,
+        suggestedCategoryId: suggestedCategory,
+        rawText,
+        notifId: remoteItem?.id
+      });
+    }
+  };
+
+  const handleConfirmFirstTimeVendor = (data: {
+    vendorName: string;
+    categoryId: string;
+    autoPost: boolean;
+    amount: number;
+  }) => {
+    if (!firstTimeVendorData) return;
+
+    // 1. Save vendor rule for future transactions
+    LocalDb.saveVendorRule({
+      vendorPattern: data.vendorName.toLowerCase().trim(),
+      displayName: data.vendorName.trim(),
+      categoryId: data.categoryId,
+      autoPost: data.autoPost,
+      lastAmount: data.amount
+    });
+
+    // 2. Add the expense to database
+    const targetCat = categories.find(c => c.id === data.categoryId);
+    const targetCatName = targetCat ? targetCat.name : 'Category';
+    const expenseDate = firstTimeVendorData.date || new Date().toISOString().split('T')[0];
+
+    const newExpenseData: Omit<Expense, 'id' | 'createdAt'> = {
+      amount: data.amount,
+      category: data.categoryId,
+      date: expenseDate,
+      note: `${data.vendorName} (${firstTimeVendorData.appName || 'Wallet Sync'})`,
+      paymentMethod: 'digital_wallet'
+    };
+
+    const added = LocalDb.addExpense(newExpenseData);
+    LocalDb.recordVendorUsage(data.vendorName, data.amount);
+
+    // Record in deduplicator fingerprint cache
+    TransactionDeduplicator.recordTransaction({
+      amount: data.amount,
+      currency: currencySymbol,
+      vendor: data.vendorName,
+      source: firstTimeVendorData.source,
+      expenseId: added.id,
+      rawText: firstTimeVendorData.rawText
+    });
+
+    LocalDb.saveDetectedNotification({
+      id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      rawText: firstTimeVendorData.rawText,
+      vendor: data.vendorName,
+      amount: data.amount,
+      currency: currencySymbol,
+      date: expenseDate,
+      source: firstTimeVendorData.source,
+      appName: firstTimeVendorData.appName,
+      status: 'manually_approved',
+      assignedCategoryId: data.categoryId,
+      detectedAt: Date.now(),
+      expenseId: added.id
+    });
+
+    // 3. Acknowledge server queue if applicable
+    if (firstTimeVendorData.notifId) {
+      fetch('/api/notifications/ack', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: firstTimeVendorData.notifId })
+      }).catch(() => {});
+    }
+
+    setFirstTimeVendorData(null);
+    loadDatabaseState(selectedMonth);
+
+    // Toast notification
+    setAutoPostToast({
+      message: `Recorded ${currencySymbol}${data.amount.toFixed(2)} at ${data.vendorName} • Future auto-post: ${data.autoPost ? 'Active' : 'Off'}`,
+      vendor: data.vendorName,
+      amount: data.amount,
+      categoryName: targetCatName,
+      expenseId: added.id
+    });
+
+    setTimeout(() => {
+      setAutoPostToast(null);
+    }, 5000);
+  };
+
+  const handleUndoAutoPost = (expenseId: string) => {
+    LocalDb.deleteExpense(expenseId);
+    setAutoPostToast(null);
+    loadDatabaseState(selectedMonth);
+  };
+
+  // Webhook Polling for incoming payment notifications
+  useEffect(() => {
+    const syncSettings = LocalDb.getWalletSyncSettings();
+    if (!syncSettings.enabled) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const token = syncSettings.webhookToken;
+        const res = await fetch(`/api/notifications/pending?token=${encodeURIComponent(token)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && Array.isArray(data.notifications) && data.notifications.length > 0) {
+          for (const item of data.notifications) {
+            handleProcessNotification(
+              item.rawText || `${item.vendor} ${item.amount}`,
+              item.source as WalletSource,
+              item
+            );
+          }
+        }
+      } catch (e) {
+        // Suppress network errors during offline or transient failures
+      }
+    }, 8000);
+
+    return () => clearInterval(pollInterval);
+  }, [categories, selectedMonth, currencySymbol]);
+
+  // Native Android Background Transaction Notification Listener (Capacitor APK)
+  useEffect(() => {
+    if (!NativeWalletBridge.isNativeAndroid()) return;
+
+    // 1. Fetch any transactions caught in background while app was closed or asleep
+    NativeWalletBridge.fetchPendingNativeTransactions().then(pending => {
+      if (pending && pending.length > 0) {
+        for (const tx of pending) {
+          handleProcessNotification(
+            tx.rawText || `${tx.vendor} ${tx.amount}`,
+            tx.source,
+            { id: tx.id }
+          );
+        }
+      }
+    }).catch(() => {});
+
+    // 2. Subscribe to real-time events while app is open
+    const unsubNative = NativeWalletBridge.subscribe(tx => {
+      handleProcessNotification(
+        tx.rawText || `${tx.vendor} ${tx.amount}`,
+        tx.source,
+        { id: tx.id }
+      );
+    });
+
+    return () => {
+      unsubNative();
+    };
+  }, [categories, selectedMonth, currencySymbol]);
+
   const handleSaveEditedExpense = (updatedData: Omit<Expense, 'id' | 'createdAt'>) => {
     if (editingExpense) {
       const prevExpense = editingExpense;
@@ -2674,6 +2998,10 @@ Date: ${new Date().toLocaleString()}
                   onSubmit={handleAddExpense} 
                   onClose={() => setShowAddForm(false)} 
                   defaultCategoryId={defaultCategoryId}
+                  onOpenWalletSync={() => {
+                    setShowAddForm(false);
+                    setShowWalletSyncModal(true);
+                  }}
                 />
               </div>
             </div>
@@ -3882,6 +4210,7 @@ Date: ${new Date().toLocaleString()}
                 onOpenCategoryManager={() => setShowCategoryManager(true)}
                 openAddOnLaunch={openAddOnLaunch}
                 onOpenAddOnLaunchChange={handleOpenAddOnLaunchChange}
+                onOpenWalletSync={() => setShowWalletSyncModal(true)}
               />
             </div>
           )}
@@ -5645,6 +5974,88 @@ Date: ${new Date().toLocaleString()}
           SubscriptionManager.saveSubscriptionState(newState);
         }}
       />
+
+      {/* Auto-Post Floating Toast Banner with Undo */}
+      {autoPostToast && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-[9999] w-[92%] max-w-md animate-in slide-in-from-top-4 duration-300">
+          <div className="bg-[#141816] border border-emerald-500/40 rounded-2xl p-3.5 shadow-2xl shadow-emerald-950/50 flex items-center justify-between gap-3 text-slate-100">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0 text-emerald-400">
+                <Zap size={16} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-mono font-black uppercase text-emerald-400 tracking-wider">
+                    Auto-Posted
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-mono">
+                    {currencySymbol}{autoPostToast.amount.toFixed(2)}
+                  </span>
+                </div>
+                <p className="text-xs font-bold text-white truncate">
+                  {autoPostToast.vendor} <span className="text-emerald-400 font-normal">→ {autoPostToast.categoryName}</span>
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleUndoAutoPost(autoPostToast.expenseId)}
+                className="px-2.5 py-1 bg-white/10 hover:bg-rose-500/20 hover:text-rose-300 hover:border-rose-500/30 text-slate-200 border border-white/15 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+              >
+                Undo
+              </button>
+              <button
+                type="button"
+                onClick={() => setAutoPostToast(null)}
+                className="p-1 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg transition-all cursor-pointer border-0 bg-transparent"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Digital Wallet & SMS Sync Hub Modal */}
+      {showWalletSyncModal && (
+        <WalletSyncModal
+          isOpen={showWalletSyncModal}
+          onClose={() => setShowWalletSyncModal(false)}
+          categories={categories}
+          currencySymbol={currencySymbol}
+          onSimulateNotification={(text, source) => {
+            handleProcessNotification(text, source);
+          }}
+        />
+      )}
+
+      {/* First-Time Vendor Categorization & Auto-Post Rule Setup Modal */}
+      {firstTimeVendorData && (
+        <FirstTimeVendorModal
+          isOpen={!!firstTimeVendorData}
+          vendorName={firstTimeVendorData.vendorName}
+          amount={firstTimeVendorData.amount}
+          currencySymbol={firstTimeVendorData.currencySymbol || currencySymbol}
+          source={firstTimeVendorData.source}
+          appName={firstTimeVendorData.appName}
+          date={firstTimeVendorData.date}
+          categories={categories}
+          suggestedCategoryId={firstTimeVendorData.suggestedCategoryId}
+          rawText={firstTimeVendorData.rawText}
+          onConfirm={handleConfirmFirstTimeVendor}
+          onClose={() => {
+            if (firstTimeVendorData.notifId) {
+              fetch('/api/notifications/ack', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: firstTimeVendorData.notifId })
+              }).catch(() => {});
+            }
+            setFirstTimeVendorData(null);
+          }}
+        />
+      )}
     </AndroidFrame>
   );
 }

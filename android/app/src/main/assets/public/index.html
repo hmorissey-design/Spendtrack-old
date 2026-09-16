@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      // Fix relative paths and service worker registration on subdirectory environments like GitHub Pages.
+      // If the URL is accessed without a trailing slash (e.g. /LooseBudget), redirect to have the trailing slash (/LooseBudget/).
+      if (window.location.hostname !== 'localhost' && 
+          !window.location.pathname.endsWith('/') && 
+          !window.location.pathname.split('/').pop().includes('.')) {
+        window.location.replace(window.location.pathname + '/' + window.location.search + window.location.hash);
+      }
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" type="image/jpeg" href="./icon.jpg" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <link rel="apple-touch-icon" href="./icon.jpg" />
+    <title>LooseBudget</title>
+    <script type="module" crossorigin src="./assets/index-CbvUB3Pj.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BalXBpLI.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        // Under active development or preview environments, unregister service workers to avoid stale cache issues
+        if (
+          window.location.hostname === 'localhost' || 
+          window.location.hostname.includes('ais-dev-') || 
+          window.location.hostname.includes('ais-pre-')
+        ) {
+          navigator.serviceWorker.getRegistrations().then(registrations => {
+            for (let registration of registrations) {
+              registration.unregister().then(() => {
+                console.log('Active service worker unregistered for dev/preview environment.');
+              });
+            }
+          });
+        } else {
+          const registerSW = () => {
+            navigator.serviceWorker.register('./sw.js')
+              .then(reg => {
+                console.log('Service Worker registered successfully:', reg.scope);
+
+                // Auto update check whenever user re-opens or focuses the app
+                const checkForUpdates = () => {
+                  reg.update().catch(() => {});
+                };
+                window.addEventListener('focus', checkForUpdates);
+                document.addEventListener('visibilitychange', () => {
+                  if (document.visibilityState === 'visible') checkForUpdates();
+                });
+
+                // Trigger skipWaiting when a new worker is waiting
+                if (reg.waiting) {
+                  reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+
+                reg.addEventListener('updatefound', () => {
+                  const newWorker = reg.installing;
+                  if (newWorker) {
+                    newWorker.addEventListener('statechange', () => {
+                      if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                      }
+                    });
+                  }
+                });
+              })
+              .catch(err => console.log('Service Worker registration failed:', err));
+          };
+
+          // Listen for controllerchange to trigger auto-reload on service worker updates
+          let refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+              refreshing = true;
+              window.location.reload();
+            }
+          });
+
+          if (document.readyState === 'complete' || document.readyState === 'interactive') {
+            registerSW();
+          } else {
+            window.addEventListener('load', registerSW);
+          }
+        }
+      }
+    </script>
+  </body>
+</html>
+
