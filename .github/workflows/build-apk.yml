@@ -28,8 +28,12 @@ jobs:
 
       - name: Setup Android SDK Environment
         run: |
-          yes | sdkmanager --licenses || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" || true
+          export ANDROID_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-35" "build-tools;35.0.0" || true
 
       - name: Install Node Dependencies
         run: npm ci || npm install
@@ -49,8 +53,7 @@ jobs:
       - name: Build Android Debug & Release APK
         run: |
           cd android
-          ./gradlew assembleDebug --stacktrace
-          ./gradlew assembleRelease --stacktrace || true
+          ./gradlew assembleDebug --stacktrace -Pandroid.injected.invoked.from.ide=true || ./gradlew assembleDebug --info
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
