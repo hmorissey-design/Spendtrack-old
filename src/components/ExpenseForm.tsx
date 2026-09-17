@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Category, Expense } from '../types';
 import { Plus, X, Calendar, DollarSign, MessageSquare, CreditCard, Sparkles, Check, Smartphone } from 'lucide-react';
 import { renderCategoryIcon } from './BudgetSettings';
+import { useIsMobileDevice } from '../utils/device';
 
 interface ExpenseFormProps {
   categories: Category[];
@@ -41,6 +42,7 @@ const getDarkTextColor = (colorStr: string) => {
 };
 
 export function ExpenseForm({ categories, savingsGoals, onSubmit, onClose, defaultCategoryId, expenseToEdit, onOpenCategoryManager, onOpenWalletSync }: ExpenseFormProps) {
+  const isMobile = useIsMobileDevice();
   const [amount, setAmount] = useState<string>(expenseToEdit ? expenseToEdit.amount.toString() : '');
   const [selectedCategory, setSelectedCategory] = useState<string>(
     expenseToEdit 
@@ -361,12 +363,13 @@ export function ExpenseForm({ categories, savingsGoals, onSubmit, onClose, defau
         </div>
       )}
 
-      {!expenseToEdit && onOpenWalletSync && (
+      {/* Mobile-only: Tap-to-pay wallet auto-detect (hidden on desktop to avoid confusion) */}
+      {!expenseToEdit && onOpenWalletSync && isMobile && (
         <div className="mb-2.5 flex items-center justify-between bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-500/20 rounded-xl px-3 py-1.5 shadow-xs">
           <div className="flex items-center gap-2 min-w-0 pr-1">
             <Smartphone size={13} className="text-emerald-400 shrink-0" />
             <span className="text-[10px] text-slate-300 truncate">
-              Detect from Google/Apple Wallet or Bank SMS
+              Detect from Google, Apple or Samsung Wallet
             </span>
           </div>
           <button

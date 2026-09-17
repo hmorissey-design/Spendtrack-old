@@ -56,7 +56,6 @@ import { getLoadedAccentThemeId, applyAccentTheme } from './utils/theme';
 import { SubscriptionManager } from './utils/subscription';
 import { AndroidFrame } from './components/AndroidFrame';
 import { ExpenseForm } from './components/ExpenseForm';
-import { ContextualTipCard } from './components/ContextualTipCard';
 import { BudgetSettings, renderCategoryIcon } from './components/BudgetSettings';
 import { CategoryManager } from './components/CategoryManager';
 import { AuthModal } from './components/AuthModal';
@@ -65,6 +64,7 @@ import { FirstTimeVendorModal } from './components/FirstTimeVendorModal';
 import { WalletSyncModal } from './components/WalletSyncModal';
 import { parseNotificationText, suggestCategoryForVendor } from './utils/notificationParser';
 import { NativeWalletBridge } from './utils/nativeWalletBridge';
+import { Capacitor } from '@capacitor/core';
 import { TransactionDeduplicator } from './utils/deduplication';
 import { HelpSection } from './components/HelpSection';
 import { auth, onAuthStateChanged, User } from './firebase';
@@ -956,7 +956,9 @@ export default function App() {
       const uid = currentUser?.uid || auth.currentUser?.uid;
       if (uid) {
         nextGoals.forEach(goal => {
-          CloudDb.saveSavingsGoalToCloud(uid, goal).catch(console.error);
+          CloudDb.saveSavingsGoalToCloud(uid, goal).then(() => {
+            SyncQueue.removePendingCreate('savings', goal.id);
+          }).catch(console.error);
         });
       }
 
@@ -1012,12 +1014,12 @@ export default function App() {
 
   const handleDeleteIncomeStream = (id: string) => {
     setIncomeStreams(prev => prev.filter(item => item.id !== id));
+    SyncQueue.removePendingCreate('income', id);
+    SyncQueue.removePendingEdit('income', id);
     SyncQueue.addPendingDelete('income', id);
     const uid = currentUser?.uid || auth.currentUser?.uid;
     if (uid) {
-      CloudDb.deleteIncomeStreamFromCloud(uid, id).then(() => {
-        SyncQueue.removePendingDelete('income', id);
-      }).catch(e => console.error(e));
+      CloudDb.deleteIncomeStreamFromCloud(uid, id).catch(e => console.error(e));
     }
   };
 
@@ -1035,9 +1037,12 @@ export default function App() {
       amount
     };
     setIncomeStreams(prev => [...prev, newItem]);
+    SyncQueue.addPendingCreate('income', newItem.id);
     const uid = currentUser?.uid || auth.currentUser?.uid;
     if (uid) {
-      CloudDb.saveIncomeStreamToCloud(uid, newItem).catch(console.error);
+      CloudDb.saveIncomeStreamToCloud(uid, newItem).then(() => {
+        SyncQueue.removePendingCreate('income', newItem.id);
+      }).catch(console.error);
     }
     setNewIncomeName('');
     setNewIncomeAmount('');
@@ -1131,9 +1136,12 @@ export default function App() {
       amount
     };
     setFixedExpenses(prev => [...prev, newItem]);
+    SyncQueue.addPendingCreate('fixed', newItem.id);
     const uid = currentUser?.uid || auth.currentUser?.uid;
     if (uid) {
-      CloudDb.saveFixedExpenseToCloud(uid, newItem).catch(console.error);
+      CloudDb.saveFixedExpenseToCloud(uid, newItem).then(() => {
+        SyncQueue.removePendingCreate('fixed', newItem.id);
+      }).catch(console.error);
     }
     setNewFixedName('');
     setNewFixedAmount('');
@@ -1166,6 +1174,7 @@ export default function App() {
       currentAmount,
       allocationPercent: finalAlloc
     };
+    SyncQueue.addPendingCreate('savings', newItem.id);
     updateAndSyncSavingsGoals(prev => [...prev, newItem]);
     setNewSavingsName('');
     setNewSavingsAmount('');
@@ -1177,22 +1186,22 @@ export default function App() {
 
   const handleDeleteFixedExpense = (id: string) => {
     setFixedExpenses(prev => prev.filter(item => item.id !== id));
+    SyncQueue.removePendingCreate('fixed', id);
+    SyncQueue.removePendingEdit('fixed', id);
     SyncQueue.addPendingDelete('fixed', id);
     const uid = currentUser?.uid || auth.currentUser?.uid;
     if (uid) {
-      CloudDb.deleteFixedExpenseFromCloud(uid, id).then(() => {
-        SyncQueue.removePendingDelete('fixed', id);
-      }).catch(e => console.error(e));
+      CloudDb.deleteFixedExpenseFromCloud(uid, id).catch(e => console.error(e));
     }
   };
 
   const handleDeleteSavingsGoal = (id: string) => {
+    SyncQueue.removePendingCreate('savings', id);
+    SyncQueue.removePendingEdit('savings', id);
     SyncQueue.addPendingDelete('savings', id);
     const uid = currentUser?.uid || auth.currentUser?.uid;
     if (uid) {
-      CloudDb.deleteSavingsGoalFromCloud(uid, id).then(() => {
-        SyncQueue.removePendingDelete('savings', id);
-      }).catch(e => console.error(e));
+      CloudDb.deleteSavingsGoalFromCloud(uid, id).catch(e => console.error(e));
     }
     updateAndSyncSavingsGoals(prev => prev.filter(item => item.id !== id));
   };
@@ -1229,7 +1238,8 @@ export default function App() {
   const [showPwaGuide, setShowPwaGuide] = useState<boolean>(false);
   const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      return window.matchMedia('(display-mode: standalone)').matches || 
+      return Capacitor.isNativePlatform() ||
+             window.matchMedia('(display-mode: standalone)').matches || 
              (navigator as any).standalone === true ||
              document.referrer.includes('android-app://');
     }
@@ -2945,9 +2955,9 @@ Date: ${new Date().toLocaleString()}
           </div>
         )}
 
-        {/* Contextual Savings & Budget Tip Card OR Demo Mode Announcement Banner */}
-        <div className="px-3 pt-1.5 pb-0.5 shrink-0">
-          {!subscriptionState.isSubscribed ? (
+        {/* Demo Mode Announcement Banner (Hidden when subscribed to maximize space) */}
+        {!subscriptionState.isSubscribed && (
+          <div className="px-3 pt-1.5 pb-0.5 shrink-0">
             <div className="relative overflow-hidden bg-gradient-to-r from-amber-500/15 via-emerald-500/10 to-amber-500/10 border border-amber-500/30 rounded-2xl p-3 sm:p-3.5 shadow-lg backdrop-blur-md">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <div className="flex items-start gap-2.5">
@@ -2974,15 +2984,8 @@ Date: ${new Date().toLocaleString()}
                 </button>
               </div>
             </div>
-          ) : (
-            <ContextualTipCard 
-              expenses={expenses}
-              categories={categories}
-              totalBudget={totals.limit}
-              totalSpent={totals.totalSpent}
-            />
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Primary Screen Scrollable Frame */}
         <div ref={mainScrollRef} className="flex-1 min-h-0 overflow-y-auto px-3.5 py-1.5 bg-[#0A0A0A] space-y-1.5">
@@ -6017,7 +6020,7 @@ Date: ${new Date().toLocaleString()}
         </div>
       )}
 
-      {/* Digital Wallet & SMS Sync Hub Modal */}
+      {/* Digital Wallet Sync Hub Modal */}
       {showWalletSyncModal && (
         <WalletSyncModal
           isOpen={showWalletSyncModal}

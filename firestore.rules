@@ -16,7 +16,7 @@ service cloud.firestore {
     }
 
     function isExistingDataOwner() {
-      return isAuthenticated() && resource.data.userId == request.auth.uid;
+      return isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
     }
 
     // User profiles

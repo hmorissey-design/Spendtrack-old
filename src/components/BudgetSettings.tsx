@@ -28,6 +28,7 @@ import {
 
 import dashSplash from '../assets/images/expensetrack_dash_splash_1781301585056.jpg';
 import chartsSplash from '../assets/images/expensetrack_charts_splash_1781301595864.jpg';
+import { useIsMobileDevice } from '../utils/device';
 import budgetSplash from '../assets/images/expensetrack_budget_splash_1781301607200.jpg';
 import pdfReportSplash from '../assets/images/expensetrack_pdf_splash_1781301617685.jpg';
 import appLogo from '../assets/images/loosebudget_logo_1785685735427.jpg';
@@ -155,6 +156,7 @@ export function BudgetSettings({
   onOpenAddOnLaunchChange,
   onOpenWalletSync
  }: BudgetSettingsProps) {
+  const isMobile = useIsMobileDevice();
   const [previewAsset, setPreviewAsset] = useState<{ name: string; url: string } | null>(null);
   const [renderCharts, setRenderCharts] = useState(false);
 
@@ -802,38 +804,40 @@ export function BudgetSettings({
         </div>
       </div>
 
-      {/* Wallet & Notification Auto-Post Sync Card */}
-      <div className="bg-gradient-to-r from-emerald-950/30 via-slate-900 to-black text-slate-100 rounded-xl p-3.5 border border-emerald-500/20 shadow-xs animate-in fade-in duration-200">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex-1 min-w-0 pr-2 space-y-1">
-            <div className="flex items-center gap-2">
-              <Smartphone size={15} className="text-emerald-400 shrink-0" />
-              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-widest font-sans">
-                Wallet & SMS Notification Sync
-              </h4>
-              <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.2 rounded-full border border-emerald-500/30">
-                Auto-Detect
-              </span>
+      {/* Wallet & Notification Auto-Post Sync Card (Mobile Devices Only - hidden on desktop to avoid confusion) */}
+      {isMobile && (
+        <div className="bg-gradient-to-r from-emerald-950/30 via-slate-900 to-black text-slate-100 rounded-xl p-3.5 border border-emerald-500/20 shadow-xs animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex-1 min-w-0 pr-2 space-y-1">
+              <div className="flex items-center gap-2">
+                <Smartphone size={15} className="text-emerald-400 shrink-0" />
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-widest font-sans">
+                  Digital Wallet Sync (Google & Samsung Wallet)
+                </h4>
+                <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.2 rounded-full border border-emerald-500/30">
+                  Tap-to-Pay
+                </span>
+              </div>
+              <p className="text-[10.5px] text-slate-400 leading-relaxed">
+                Auto-detect tap-to-pay transactions from Google Wallet, Samsung Wallet, and Apple Wallet. Categorize new retailers and auto-post future transactions.
+              </p>
             </div>
-            <p className="text-[10.5px] text-slate-400 leading-relaxed">
-              Auto-detect transactions from Google Wallet, Apple Wallet, Samsung Wallet & bank SMS alerts. Categorize new retailers and auto-post future transactions.
-            </p>
-          </div>
 
-          <div className="shrink-0">
-            {onOpenWalletSync && (
-              <button
-                type="button"
-                onClick={onOpenWalletSync}
-                className="w-full sm:w-auto py-2 px-3.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-950/30 border-0"
-              >
-                <Zap size={13} className="fill-current" />
-                <span>Configure Sync & Rules</span>
-              </button>
-            )}
+            <div className="shrink-0">
+              {onOpenWalletSync && (
+                <button
+                  type="button"
+                  onClick={onOpenWalletSync}
+                  className="w-full sm:w-auto py-2 px-3.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-950/30 border-0"
+                >
+                  <Zap size={13} className="fill-current" />
+                  <span>Configure Sync & Rules</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Database Purge Options (Hidden for Cloud-synced users) */}
       {!isCloudSynced && (

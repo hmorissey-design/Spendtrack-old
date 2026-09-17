@@ -33,6 +33,16 @@ public class WalletNotificationService extends NotificationListenerService {
 
         try {
             String packageName = sbn.getPackageName();
+            if (packageName != null) {
+                String pkgLower = packageName.toLowerCase();
+                // Explicitly ignore SMS and text messaging apps to avoid capturing bank alerts lacking payee names
+                if (pkgLower.contains("messaging") || pkgLower.contains("mms") || pkgLower.contains("sms") ||
+                    pkgLower.contains("telephony") || pkgLower.contains("chat") ||
+                    pkgLower.contains("android.apps.messaging") || pkgLower.contains("samsung.android.messaging")) {
+                    return;
+                }
+            }
+
             Bundle extras = sbn.getNotification().extras;
             if (extras == null) return;
 
@@ -49,10 +59,10 @@ public class WalletNotificationService extends NotificationListenerService {
             String fullText = (title + " " + text).trim();
             if (fullText.isEmpty()) return;
 
-            // Determine if this is a financial notification
+            // Determine if this is a financial notification (Google Wallet, Samsung Wallet, or verified banking app)
             String source = detectWalletSource(packageName, fullText);
             if (source == null) {
-                // Not a recognized financial package, check if content has financial transaction keywords
+                // Not a recognized wallet/bank package, check if content has financial transaction keywords
                 if (!isFinancialText(fullText)) {
                     return;
                 }
@@ -65,8 +75,12 @@ public class WalletNotificationService extends NotificationListenerService {
                 return; // No valid dollar amount found
             }
 
-            // Extract merchant name
+            // Extract merchant name - strictly require a valid, non-generic vendor
             String vendor = extractVendor(fullText, title, source);
+            if (vendor == null || vendor.isEmpty() || isInvalidVendorName(vendor)) {
+                Log.i(TAG, "Notification skipped: No valid merchant/payee name found in text: " + fullText);
+                return;
+            }
 
             // Create transaction JSON
             JSONObject tx = new JSONObject();
@@ -93,19 +107,18 @@ public class WalletNotificationService extends NotificationListenerService {
     }
 
     private String detectWalletSource(String pkg, String text) {
-        if (pkg.contains("walletnfcrel") || pkg.contains("google.android.apps.wallet")) {
+        if (pkg == null) return null;
+        String p = pkg.toLowerCase();
+        if (p.contains("walletnfcrel") || p.contains("google.android.apps.wallet")) {
             return "google_wallet";
         }
-        if (pkg.contains("samsung.android.spay")) {
+        if (p.contains("samsung.android.spay") || p.contains("samsung.wallet")) {
             return "samsung_wallet";
         }
-        if (pkg.contains("messaging") || pkg.contains("mms") || pkg.contains("sms")) {
-            return "sms_bank";
-        }
-        if (pkg.contains("chase") || pkg.contains("citi") || pkg.contains("wellsfargo") ||
-            pkg.contains("rbc") || pkg.contains("td") || pkg.contains("bmo") ||
-            pkg.contains("scotiabank") || pkg.contains("cibc") || pkg.contains("capitalone") ||
-            pkg.contains("monzo") || pkg.contains("revolut")) {
+        if (p.contains("chase") || p.contains("citi") || p.contains("wellsfargo") ||
+            p.contains("rbc") || p.contains("td") || p.contains("bmo") ||
+            p.contains("scotiabank") || p.contains("cibc") || p.contains("capitalone") ||
+            p.contains("monzo") || p.contains("revolut")) {
             return "bank_app";
         }
         return null;
@@ -136,46 +149,88 @@ public class WalletNotificationService extends NotificationListenerService {
         return null;
     }
 
+    private boolean isInvalidVendorName(String name) {
+        if (name == null) return true;
+        String lower = name.toLowerCase().trim();
+        if (lower.length() < 2) return true;
+        if (lower.equals("retail store") || lower.equals("merchant") || lower.equals("unknown merchant") ||
+            lower.equals("payee") || lower.equals("vendor") || lower.equals("store")) {
+            return true;
+        }
+        // Reject strings that are bank transaction sentences rather than merchant names
+        return lower.contains("transaction") ||
+               lower.contains("occurred") ||
+               lower.contains("card ending") ||
+               lower.contains("fraud") ||
+               lower.contains("authorized") ||
+               lower.contains("alert") ||
+               lower.contains("notification") ||
+               lower.contains("account balance") ||
+               lower.contains("deposit");
+    }
+
     private String extractVendor(String text, String title, String source) {
-        // Try pattern: "at [Merchant]"
-        Pattern atPattern = Pattern.compile("\\bat\\s+([^,.!\\n\\r0-9]+)", Pattern.CASE_INSENSITIVE);
+        // Try pattern: "at [Merchant]" (standard Google Wallet / Samsung Wallet format)
+        Pattern atPattern = Pattern.compile("\\bat\\s+([^,.!\\n\\r0-9]+?)(?:\\s+with|\\s+for|\\s+on|\\s+using|\\s+card|\\s+ending|\\.|\\,|$)", Pattern.CASE_INSENSITIVE);
         Matcher m = atPattern.matcher(text);
         if (m.find()) {
             String v = m.group(1).trim();
-            if (v.length() > 1 && v.length() < 50) return cleanVendor(v);
+            if (v.length() > 1 && v.length() < 50) {
+                String cleaned = cleanVendor(v);
+                if (!isInvalidVendorName(cleaned)) return cleaned;
+            }
         }
 
         // Try pattern: "paid to [Merchant]"
-        Pattern toPattern = Pattern.compile("\\b(paid|sent)\\s+(?:to\\s+)?([^,.!\\n\\r0-9]+)", Pattern.CASE_INSENSITIVE);
+        Pattern toPattern = Pattern.compile("\\b(paid|sent)\\s+(?:to\\s+)?([^,.!\\n\\r0-9]+?)(?:\\s+with|\\s+for|\\s+on|\\s+using|\\s+card|\\s+ending|\\.|\\,|$)", Pattern.CASE_INSENSITIVE);
         Matcher m2 = toPattern.matcher(text);
         if (m2.find()) {
             String v = m2.group(2).trim();
-            if (v.length() > 1 && v.length() < 50) return cleanVendor(v);
+            if (v.length() > 1 && v.length() < 50) {
+                String cleaned = cleanVendor(v);
+                if (!isInvalidVendorName(cleaned)) return cleaned;
+            }
         }
 
         // Try pattern: "charge from [Merchant]"
-        Pattern fromPattern = Pattern.compile("\\bcharge(?:\\s+from)?\\s+([^,.!\\n\\r0-9]+)", Pattern.CASE_INSENSITIVE);
+        Pattern fromPattern = Pattern.compile("\\bcharge(?:\\s+from)?\\s+([^,.!\\n\\r0-9]+?)(?:\\s+with|\\s+for|\\s+on|\\s+using|\\s+card|\\s+ending|\\.|\\,|$)", Pattern.CASE_INSENSITIVE);
         Matcher m3 = fromPattern.matcher(text);
         if (m3.find()) {
             String v = m3.group(1).trim();
-            if (v.length() > 1 && v.length() < 50) return cleanVendor(v);
+            if (v.length() > 1 && v.length() < 50) {
+                String cleaned = cleanVendor(v);
+                if (!isInvalidVendorName(cleaned)) return cleaned;
+            }
         }
 
-        if (title != null && !title.isEmpty() && !title.equalsIgnoreCase("Google Wallet") && !title.equalsIgnoreCase("Samsung Pay")) {
-            return cleanVendor(title);
+        // If title represents a specific merchant (and is not generic app title or generic alert)
+        if (title != null && !title.isEmpty()) {
+            String tClean = cleanVendor(title);
+            String tLower = tClean.toLowerCase();
+            if (!tLower.contains("google wallet") && !tLower.contains("google pay") &&
+                !tLower.contains("samsung pay") && !tLower.contains("samsung wallet") &&
+                !tLower.contains("wallet") && !tLower.contains("chase") &&
+                !tLower.contains("alert") && !tLower.contains("bank") &&
+                !isInvalidVendorName(tClean)) {
+                return tClean;
+            }
         }
 
-        return "Retail Store";
+        return null;
     }
 
     private String cleanVendor(String raw) {
-        String cleaned = raw.replaceAll("(?i)^(sq\\s*\\*|tst\\s*\\*|sp\\s*\\*|paypal\\s*\\*)", "");
+        if (raw == null) return "";
+        // Strip leading/trailing quotation marks, single quotes, backticks, and curly quotes
+        String cleaned = raw.replaceAll("^[\\\"'“”‘’«»`]+|[\\\"'“”‘’«»`]+$", "");
+        cleaned = cleaned.replaceAll("(?i)^(sq\\s*\\*|tst\\s*\\*|sp\\s*\\*|paypal\\s*\\*)", "");
         cleaned = cleaned.replaceAll("#\\s*\\d+", "");
         cleaned = cleaned.replaceAll("(?i)\\b(store|loc|terminal)\\s*#?\\s*\\d+", "");
         cleaned = cleaned.replaceAll("(?i)\\b(llc|inc|corp|ltd|co)\\b", "");
         cleaned = cleaned.replaceAll("[_\\-*#]+", " ");
+        cleaned = cleaned.replaceAll("^[\\\"'“”‘’«»`]+|[\\\"'“”‘’«»`]+$", "");
         cleaned = cleaned.trim();
-        return cleaned.isEmpty() ? "Retail Store" : cleaned;
+        return cleaned;
     }
 
     private static synchronized void savePendingTransaction(Context context, JSONObject tx) {

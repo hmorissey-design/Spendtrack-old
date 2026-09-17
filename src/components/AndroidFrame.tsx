@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { Capacitor } from '@capacitor/core';
 import { Download, X, CheckCircle } from 'lucide-react';
 
 interface AndroidFrameProps {
@@ -18,7 +19,8 @@ export function AndroidFrame({ children }: AndroidFrameProps) {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
-      return window.matchMedia('(display-mode: standalone)').matches || 
+      return Capacitor.isNativePlatform() ||
+             window.matchMedia('(display-mode: standalone)').matches || 
              (navigator as any).standalone === true ||
              document.referrer.includes('android-app://');
     }

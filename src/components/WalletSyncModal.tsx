@@ -117,7 +117,7 @@ export function WalletSyncModal({
       }
       const text = await navigator.clipboard.readText();
       if (!text || text.trim().length === 0) {
-        setClipboardFeedback('Clipboard is empty. Copy an SMS or wallet notification text first.');
+        setClipboardFeedback('Clipboard is empty. Copy a wallet notification receipt first.');
         return;
       }
 
@@ -194,7 +194,7 @@ export function WalletSyncModal({
             <div className="text-left">
               <div className="flex items-center gap-2">
                 <h3 className="font-extrabold text-white text-sm uppercase tracking-wider">
-                  Wallet & Notification Sync
+                  Digital Wallet Sync
                 </h3>
                 <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -202,7 +202,7 @@ export function WalletSyncModal({
                 </span>
               </div>
               <p className="text-[10px] text-gray-400 font-mono mt-0.5">
-                Auto-detect transactions from Google, Apple, Samsung Wallet & SMS
+                Auto-detect transactions from Google Wallet, Samsung Wallet & Apple Wallet
               </p>
             </div>
           </div>
@@ -290,7 +290,7 @@ export function WalletSyncModal({
                       </span>
                     </div>
                     <p className="text-[11px] text-gray-300 leading-relaxed font-medium">
-                      Google Wallet, Samsung Wallet, bank alerts, and SMS are captured automatically in the background. When you tap to pay or receive a payment notification, it's recorded instantly!
+                      Google Wallet, Samsung Wallet, and banking tap-to-pay are captured automatically in the background. When you tap to pay or receive a verified payment confirmation, it's recorded instantly!
                     </p>
                   </div>
                 ) : (
@@ -337,7 +337,7 @@ export function WalletSyncModal({
                   type="button"
                   onClick={handleCheckClipboard}
                   className="p-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
-                  title="Check clipboard for copied notification or SMS receipt"
+                  title="Check clipboard for copied notification receipt"
                 >
                   <ClipboardPaste size={14} />
                   <span>Check Clipboard for Transaction</span>
@@ -418,21 +418,18 @@ export function WalletSyncModal({
                     />
                   </div>
 
-                  {/* Bank SMS */}
-                  <div className="p-3 bg-black/40 border border-white/5 rounded-xl flex items-center justify-between">
+                  {/* SMS / Text Alerts (Excluded) */}
+                  <div className="p-3 bg-black/40 border border-white/5 rounded-xl flex items-center justify-between opacity-70">
                     <div className="flex items-center gap-2.5">
-                      <span className="text-base">💬</span>
+                      <span className="text-base">🛡️</span>
                       <div>
-                        <p className="text-xs font-bold text-white">Bank SMS & Text Alerts</p>
-                        <p className="text-[9px] text-gray-500 font-mono">Real-time fraud & spend alerts</p>
+                        <p className="text-xs font-bold text-gray-300">SMS / Text Alerts (Excluded)</p>
+                        <p className="text-[9px] text-gray-500 font-mono">Bypassed to prevent missing-payee text alerts</p>
                       </div>
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={settings.monitorSms}
-                      onChange={() => handleToggleSetting('monitorSms')}
-                      className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500/30 accent-emerald-500 cursor-pointer"
-                    />
+                    <span className="text-[9px] font-mono font-bold text-gray-400 bg-white/5 px-2 py-0.5 rounded border border-white/10">
+                      Excluded
+                    </span>
                   </div>
 
                   {/* Apple Wallet (For web/cross-device users) */}
@@ -543,7 +540,7 @@ export function WalletSyncModal({
               {/* Sample Presets Grid */}
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                  Click a Sample Push Notification / SMS:
+                  Click a Sample Digital Wallet Notification:
                 </label>
 
                 <div className="space-y-2">

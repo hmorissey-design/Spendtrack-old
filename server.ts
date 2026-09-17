@@ -161,8 +161,8 @@ function serverParseNotificationText(text: string, sourceHint?: string) {
   }
 
   // Detect source
-  let source = sourceHint || "sms_bank";
-  let appName = "Phone Notification";
+  let source = sourceHint || "digital_wallet";
+  let appName = "Wallet Notification";
   const lower = trimmed.toLowerCase();
   if (lower.includes("google wallet") || lower.includes("google pay") || lower.includes("gpay")) {
     source = "google_wallet";
@@ -173,9 +173,6 @@ function serverParseNotificationText(text: string, sourceHint?: string) {
   } else if (lower.includes("samsung wallet") || lower.includes("samsung pay")) {
     source = "samsung_wallet";
     appName = "Samsung Wallet";
-  } else if (lower.includes("chase") || lower.includes("wells fargo") || lower.includes("bank of america") || lower.includes("amex") || lower.includes("citi")) {
-    source = "sms_bank";
-    appName = "Bank SMS";
   }
 
   // Extract amount
@@ -201,7 +198,7 @@ function serverParseNotificationText(text: string, sourceHint?: string) {
 
   // Extract vendor
   let rawVendor = "";
-  const atMatch = trimmed.match(/(?:at|with)\s+([A-Za-z0-9\s'&.*#\-]+?)(?:\s+on|\s+with|\s+for|\s+card|\s+ending|\.|\,|$)/i);
+  const atMatch = trimmed.match(/(?:at|with)\s+([A-Za-z0-9\s'&.*#\-]+?)(?:\s+on|\s+with|\s+for|\s+using|\s+card|\s+ending|\.|\,|$)/i);
   const toMatch = trimmed.match(/(?:paid|sent|transfer(?:red)? to)\s+(?:(?:\$|\w+)?\s*\d+(?:\.\d{2})?\s*(?:to\s+)?)?([A-Za-z0-9\s'&.*#\-]+?)(?:\s+with|\s+using|\s+on|\s+from|\.|\,|$)/i);
   const fromMatch = trimmed.match(/(?:charge|transaction|purchase)\s+from\s+([A-Za-z0-9\s'&.*#\-]+?)(?:\s+for|\s+on|\.|\,|$)/i);
   const prefixMatch = trimmed.match(/(?:Google Wallet|Google Pay|Apple Pay|Samsung Pay|Samsung Wallet):\s*(?:Paid\s*)?([A-Za-z0-9\s'&.*#\-]+?)(?:\s+for|\s+\$|\s*\d|\.|\,|$)/i);
@@ -215,14 +212,33 @@ function serverParseNotificationText(text: string, sourceHint?: string) {
   } else if (prefixMatch && prefixMatch[1]?.trim()) {
     rawVendor = prefixMatch[1];
   } else {
-    rawVendor = "Unknown Merchant";
+    return null; // Require an explicit vendor
   }
 
-  let vendor = rawVendor.replace(/^(sq\s*\*|tst\s*\*|sp\s*\*|paypal\s*\*|amzn\s*mktp\s*\*)/i, "").trim();
+  // Strip quotation marks and clean prefixes
+  let vendor = rawVendor.replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, "").trim();
+  vendor = vendor.replace(/^(sq\s*\*|tst\s*\*|sp\s*\*|paypal\s*\*|amzn\s*mktp\s*\*)/i, "").trim();
   vendor = vendor.replace(/#\s*\d+/g, "").trim();
+  vendor = vendor.replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, "").trim();
+
+  const vLower = vendor.toLowerCase();
+  if (
+    !vendor ||
+    vendor.length < 2 ||
+    vLower === "merchant" ||
+    vLower === "unknown merchant" ||
+    vLower.includes("transaction") ||
+    vLower.includes("occurred") ||
+    vLower.includes("card ending") ||
+    vLower.includes("fraud") ||
+    vLower.includes("authorized") ||
+    vLower.includes("alert")
+  ) {
+    return null;
+  }
 
   return {
-    vendor: vendor || "Merchant",
+    vendor,
     amount: rawAmount,
     currency: currency || "$",
     date: today,

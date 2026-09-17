@@ -357,8 +357,11 @@ export const LocalDb = {
     };
     expenses.unshift(newExpense); // Insert new expense first
     this.saveExpenses(expenses);
+    SyncQueue.addPendingCreate('expenses', newExpense.id);
     if (auth.currentUser) {
-      CloudDb.saveExpenseToCloud(auth.currentUser.uid, newExpense).catch(e => console.error('Cloud save expense error:', e));
+      CloudDb.saveExpenseToCloud(auth.currentUser.uid, newExpense).then(() => {
+        SyncQueue.removePendingCreate('expenses', newExpense.id);
+      }).catch(e => console.error('Cloud save expense error:', e));
     }
     return newExpense;
   },
@@ -367,11 +370,11 @@ export const LocalDb = {
     const expenses = this.getExpenses();
     const filtered = expenses.filter(e => e.id !== id);
     this.saveExpenses(filtered);
+    SyncQueue.removePendingCreate('expenses', id);
+    SyncQueue.removePendingEdit('expenses', id);
     SyncQueue.addPendingDelete('expenses', id);
     if (auth.currentUser) {
-      CloudDb.deleteExpenseFromCloud(auth.currentUser.uid, id).then(() => {
-        SyncQueue.removePendingDelete('expenses', id);
-      }).catch(e => console.error('Cloud delete expense error:', e));
+      CloudDb.deleteExpenseFromCloud(auth.currentUser.uid, id).catch(e => console.error('Cloud delete expense error:', e));
     }
   },
 
@@ -618,8 +621,11 @@ export const LocalDb = {
     };
     categories.push(newCategory);
     this.saveCategories(categories);
+    SyncQueue.addPendingCreate('categories', newCategory.id);
     if (auth.currentUser) {
-      CloudDb.saveCategoryToCloud(auth.currentUser.uid, newCategory).catch(e => console.error('Cloud add category error:', e));
+      CloudDb.saveCategoryToCloud(auth.currentUser.uid, newCategory).then(() => {
+        SyncQueue.removePendingCreate('categories', newCategory.id);
+      }).catch(e => console.error('Cloud add category error:', e));
     }
     
     if (month) {
@@ -682,11 +688,11 @@ export const LocalDb = {
       // No history, we can safely delete it completely
       const filtered = categories.filter(c => c.id !== id);
       this.saveCategories(filtered);
+      SyncQueue.removePendingCreate('categories', id);
+      SyncQueue.removePendingEdit('categories', id);
       SyncQueue.addPendingDelete('categories', id);
       if (auth.currentUser) {
-        CloudDb.deleteCategoryFromCloud(auth.currentUser.uid, id).then(() => {
-          SyncQueue.removePendingDelete('categories', id);
-        }).catch(e => console.error('Cloud delete category error:', e));
+        CloudDb.deleteCategoryFromCloud(auth.currentUser.uid, id).catch(e => console.error('Cloud delete category error:', e));
       }
     }
   },
@@ -1087,7 +1093,7 @@ export const LocalDb = {
       monitorAppleWallet: true,
       monitorSamsungWallet: true,
       monitorBankApps: true,
-      monitorSms: true,
+      monitorSms: false,
       duplicateProtection: true,
       monitoredApps: ['Google Wallet', 'Apple Pay', 'Samsung Pay', 'Chase', 'Amex', 'Bank of America'],
       autoCheckClipboard: true

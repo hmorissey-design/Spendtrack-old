@@ -27,6 +27,9 @@ export function cleanVendorName(raw: string): string {
 
   let clean = raw.trim();
 
+  // Strip leading and trailing quotation marks and brackets
+  clean = clean.replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, '').trim();
+
   // Strip POS/Aggregator prefixes
   clean = clean.replace(/^(sq\s*\*|tst\s*\*|sp\s*\*|paypal\s*\*|amzn\s*mktp\s*(us)?\*|stripe\s*\*|clv\s*\*)/i, '');
 
@@ -46,6 +49,7 @@ export function cleanVendorName(raw: string): string {
 
   // Strip extra punctuation and multiple spaces
   clean = clean.replace(/[_\-*#]+/g, ' ');
+  clean = clean.replace(/^["'“”‘’«»`]+|["'“”‘’«»`]+$/g, '');
   clean = clean.replace(/\s{2,}/g, ' ').trim();
 
   // Convert ALL CAPS or all lower to Title Case for elegant presentation
@@ -71,8 +75,34 @@ export function cleanVendorName(raw: string): string {
   return clean || 'Unknown Merchant';
 }
 
+export function isInvalidVendor(name: string): boolean {
+  if (!name) return true;
+  const lower = name.toLowerCase().trim();
+  if (lower.length < 2) return true;
+  if (
+    lower === 'unknown merchant' ||
+    lower === 'merchant' ||
+    lower === 'retail store' ||
+    lower === 'store' ||
+    lower === 'payee'
+  ) {
+    return true;
+  }
+  return (
+    lower.includes('transaction') ||
+    lower.includes('occurred') ||
+    lower.includes('card ending') ||
+    lower.includes('fraud') ||
+    lower.includes('authorized') ||
+    lower.includes('alert') ||
+    lower.includes('notification') ||
+    lower.includes('account balance') ||
+    lower.includes('deposit')
+  );
+}
+
 /**
- * Parses raw notification text (from push notification or SMS) or JSON payload
+ * Parses raw notification text (from digital wallet notification) or JSON payload
  */
 export function parseNotificationText(
   text: string, 
@@ -90,15 +120,18 @@ export function parseNotificationText(
       const amount = parseFloat(data.amount || data.value || data.total);
       const vendor = data.vendor || data.merchant || data.payee || data.name;
       if (!isNaN(amount) && amount > 0 && vendor) {
-        return {
-          vendor: cleanVendorName(String(vendor)),
-          amount: Math.abs(amount),
-          currency: data.currency || '$',
-          date: data.date || today,
-          source: (data.source as WalletSource) || preferredSource || 'apple_wallet',
-          appName: data.appName || 'Wallet Automation',
-          confidence: 0.98
-        };
+        const cleanedVendor = cleanVendorName(String(vendor));
+        if (!isInvalidVendor(cleanedVendor)) {
+          return {
+            vendor: cleanedVendor,
+            amount: Math.abs(amount),
+            currency: data.currency || '$',
+            date: data.date || today,
+            source: (data.source as WalletSource) || preferredSource || 'apple_wallet',
+            appName: data.appName || 'Wallet Automation',
+            confidence: 0.98
+          };
+        }
       }
     } catch (e) {
       // Fall through to regex text matching
@@ -106,8 +139,8 @@ export function parseNotificationText(
   }
 
   // 2. Identify Source App / Wallet
-  let detectedSource: WalletSource = preferredSource || 'sms_bank';
-  let appName = 'Phone Notification';
+  let detectedSource: WalletSource = preferredSource || 'google_wallet';
+  let appName = 'Google Wallet';
 
   const lower = trimmed.toLowerCase();
   if (lower.includes('google wallet') || lower.includes('google pay') || lower.includes('gpay')) {
@@ -119,9 +152,6 @@ export function parseNotificationText(
   } else if (lower.includes('samsung wallet') || lower.includes('samsung pay')) {
     detectedSource = 'samsung_wallet';
     appName = 'Samsung Wallet';
-  } else if (lower.includes('chase') || lower.includes('wells fargo') || lower.includes('bank of america') || lower.includes('amex') || lower.includes('citi') || lower.includes('capital one') || lower.includes('td bank') || lower.includes('rbc')) {
-    detectedSource = 'sms_bank';
-    appName = 'Bank SMS';
   }
 
   // 3. Extract Amount & Currency
@@ -163,7 +193,7 @@ export function parseNotificationText(
   let rawVendor = '';
 
   // Pattern A: "at [Vendor]" (e.g., "charged $14.50 at Starbucks", "Purchase of $25.00 at Trader Joe's")
-  const atMatch = trimmed.match(/(?:at|with)\s+([A-Za-z0-9\s'&.*#\-]+?)(?:\s+on|\s+with|\s+for|\s+card|\s+ending|\.|\,|$)/i);
+  const atMatch = trimmed.match(/(?:at|with)\s+([A-Za-z0-9\s'&.*#\-]+?)(?:\s+on|\s+with|\s+for|\s+using|\s+card|\s+ending|\.|\,|$)/i);
   
   // Pattern B: "paid [Amount] to [Vendor]" or "sent to [Vendor]"
   const toMatch = trimmed.match(/(?:paid|sent|transfer(?:red)? to)\s+(?:(?:\$|\w+)?\s*\d+(?:\.\d{2})?\s*(?:to\s+)?)?([A-Za-z0-9\s'&.*#\-]+?)(?:\s+with|\s+using|\s+on|\s+from|\.|\,|$)/i);
@@ -183,22 +213,15 @@ export function parseNotificationText(
   } else if (prefixMatch && prefixMatch[1]?.trim()) {
     rawVendor = prefixMatch[1];
   } else {
-    // Fallback: strip amount and common words, take first remaining clause
-    let cleaned = trimmed
-      .replace(amountRegex, '')
-      .replace(/alert:|notice:|notification:|card ending \d{4}|you made a purchase/gi, '')
-      .trim();
-    const parts = cleaned.split(/[\n,;]/);
-    if (parts.length > 0 && parts[0].trim().length > 2) {
-      rawVendor = parts[0];
-    }
+    // If no explicit vendor pattern matched, reject rather than guessing from text fragments
+    return null;
   }
 
   // Clean vendor
   const vendor = cleanVendorName(rawVendor);
 
-  // If vendor came back empty or generic, use fallback
-  if (!vendor || vendor.toLowerCase() === 'unknown merchant') {
+  // If vendor came back empty, generic, or matching non-merchant bank text sentences
+  if (!vendor || isInvalidVendor(vendor)) {
     return null;
   }
 
@@ -317,23 +340,23 @@ export const SAMPLE_NOTIFICATION_PRESETS = [
     suggestedCategoryKeyword: 'gas'
   },
   {
-    id: 'preset_sms_fastfood',
-    title: 'Chase Bank SMS • In-N-Out Burger',
-    source: 'sms_bank' as WalletSource,
-    appName: 'Chase SMS Alert',
-    text: 'Chase Alert: You made a $14.25 purchase at IN-N-OUT BURGER on card ending 8812',
+    id: 'preset_google_fastfood',
+    title: 'Google Wallet • In-N-Out Burger',
+    source: 'google_wallet' as WalletSource,
+    appName: 'Google Wallet',
+    text: 'Google Wallet: Paid $14.25 to In-N-Out Burger with Chase Visa',
     vendor: 'In-N-Out Burger',
     amount: 14.25,
     suggestedCategoryKeyword: 'fast food'
   },
   {
-    id: 'preset_sms_streaming',
-    title: 'Amex Bank SMS • Netflix Subscription',
-    source: 'sms_bank' as WalletSource,
-    appName: 'Amex Alert',
-    text: 'Amex: Alert: $15.99 charged at NETFLIX.COM on your Platinum card',
-    vendor: 'Netflix',
-    amount: 15.99,
-    suggestedCategoryKeyword: 'entertainment'
+    id: 'preset_google_groceries',
+    title: 'Google Wallet • Whole Foods Market',
+    source: 'google_wallet' as WalletSource,
+    appName: 'Google Wallet',
+    text: 'Google Wallet: Paid $34.80 at Whole Foods Market with Mastercard',
+    vendor: 'Whole Foods Market',
+    amount: 34.80,
+    suggestedCategoryKeyword: 'groceries'
   }
 ];

@@ -102,7 +102,7 @@ export interface WalletSyncSettings {
   monitorAppleWallet: boolean;
   monitorSamsungWallet: boolean;
   monitorBankApps?: boolean;
-  monitorSms: boolean;
+  monitorSms?: boolean;
   duplicateProtection?: boolean;
   monitoredApps: string[]; // custom apps, e.g. "Chase", "Amex", "Bank of America"
   autoCheckClipboard: boolean;

@@ -286,7 +286,7 @@ export const HelpSection: React.FC<HelpSectionProps> = ({
             Click the <strong>Cloud Sync / Sign In</strong> button in the top header or settings menu.
           </p>
           <p>
-            Once logged in with Google or Email, your expenses, category targets, and savings goals synchronize seamlessly across all your devices in real-time.
+            Once logged in with your Email account, your expenses, category targets, and savings goals synchronize seamlessly across all your devices in real-time.
           </p>
         </div>
       ),
