@@ -1,21 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Google Assistant / Gemini App Actions Capability for Logging Expenses -->
-    <capability android:name="custom.actions.intent.LOG_EXPENSE">
-        <intent
-            android:action="android.intent.action.VIEW"
-            android:targetPackage="com.loosebudget.app"
-            android:targetClass="com.loosebudget.app.MainActivity"
-            android:data="expensetrack://add?amount={amount}&amp;vendor={merchant}">
-            <parameter
-                android:name="amount"
-                android:key="amount"/>
-            <parameter
-                android:name="merchant"
-                android:key="merchant"/>
-        </intent>
-    </capability>
-
     <!-- Static App Launcher Shortcut for 1-Tap Quick Add -->
     <shortcut
         android:shortcutId="add_expense_shortcut"
@@ -28,6 +12,6 @@
             android:targetPackage="com.loosebudget.app"
             android:targetClass="com.loosebudget.app.MainActivity"
             android:data="expensetrack://add" />
-        <categories android:name="android.shortcut.conversation" />
+        <categories android:name="android.intent.category.DEFAULT" />
     </shortcut>
 </shortcuts>
