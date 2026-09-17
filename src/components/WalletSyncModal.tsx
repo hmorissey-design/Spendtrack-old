@@ -8,28 +8,20 @@ import {
   Smartphone, 
   Zap, 
   Sliders, 
-  CheckCircle, 
-  Copy, 
-  ExternalLink, 
-  Play, 
   Trash2, 
   Plus, 
   X, 
   Check, 
   AlertCircle, 
-  History, 
   Tag, 
   ShieldCheck, 
   Radio, 
-  ChevronRight,
   ChevronDown,
-  ClipboardPaste,
   RefreshCw,
   Edit2
 } from 'lucide-react';
-import { Category, VendorRule, DetectedNotification, WalletSyncSettings, WalletSource } from '../types';
+import { Category, VendorRule, WalletSyncSettings, WalletSource } from '../types';
 import { LocalDb } from '../utils/db';
-import { SAMPLE_NOTIFICATION_PRESETS, parseNotificationText } from '../utils/notificationParser';
 import { NativeWalletBridge } from '../utils/nativeWalletBridge';
 import { renderCategoryIcon } from './BudgetSettings';
 
@@ -38,7 +30,7 @@ interface WalletSyncModalProps {
   onClose: () => void;
   categories: Category[];
   currencySymbol?: string;
-  onSimulateNotification: (rawText: string, preferredSource?: WalletSource) => void;
+  onSimulateNotification?: (rawText: string, preferredSource?: WalletSource) => void;
   onVendorRuleUpdated?: () => void;
 }
 
@@ -50,27 +42,21 @@ export function WalletSyncModal({
   onSimulateNotification,
   onVendorRuleUpdated
 }: WalletSyncModalProps) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'simulator' | 'rules' | 'guide'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'rules' | 'guide'>('overview');
   const [settings, setSettings] = useState<WalletSyncSettings>(() => LocalDb.getWalletSyncSettings());
   const [vendorRules, setVendorRules] = useState<VendorRule[]>(() => LocalDb.getVendorRules());
-  const [recentNotifications, setRecentNotifications] = useState<DetectedNotification[]>(() => LocalDb.getDetectedNotifications());
   
-  // Custom manual paste / test state
-  const [manualInput, setManualInput] = useState('');
-  const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [newVendorName, setNewVendorName] = useState('');
   const [newVendorCategory, setNewVendorCategory] = useState(categories[0]?.id || 'cat_groceries');
   const [newVendorAutoPost, setNewVendorAutoPost] = useState(true);
   const [showAddRuleForm, setShowAddRuleForm] = useState(false);
-  const [clipboardFeedback, setClipboardFeedback] = useState<string | null>(null);
   const [isNativeAndroid, setIsNativeAndroid] = useState<boolean>(() => NativeWalletBridge.isNativeAndroid());
   const [nativePermissionGranted, setNativePermissionGranted] = useState<boolean>(false);
 
   useEffect(() => {
     if (isOpen) {
       setVendorRules(LocalDb.getVendorRules());
-      setRecentNotifications(LocalDb.getDetectedNotifications());
       setSettings(LocalDb.getWalletSyncSettings());
       setIsNativeAndroid(NativeWalletBridge.isNativeAndroid());
       NativeWalletBridge.checkNotificationAccess().then(granted => {
@@ -90,8 +76,6 @@ export function WalletSyncModal({
   if (!isOpen) return null;
 
   const validCategories = categories.filter(c => !c.id.startsWith('SAVINGS_') && !c.isHidden);
-  const appOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://expensetrack.app';
-  const webhookUrl = `${appOrigin}/api/notifications/ingest?token=${settings.webhookToken}`;
 
   const handleToggleSetting = (key: keyof WalletSyncSettings) => {
     const updated = {
@@ -100,39 +84,6 @@ export function WalletSyncModal({
     };
     setSettings(updated);
     LocalDb.saveWalletSyncSettings(updated);
-  };
-
-  const handleCopyWebhook = () => {
-    navigator.clipboard.writeText(webhookUrl);
-    setCopiedWebhook(true);
-    setTimeout(() => setCopiedWebhook(false), 2500);
-  };
-
-  const handleCheckClipboard = async () => {
-    try {
-      setClipboardFeedback(null);
-      if (!navigator.clipboard || !navigator.clipboard.readText) {
-        setClipboardFeedback('Clipboard access requires browser permission or manual paste.');
-        return;
-      }
-      const text = await navigator.clipboard.readText();
-      if (!text || text.trim().length === 0) {
-        setClipboardFeedback('Clipboard is empty. Copy a wallet notification receipt first.');
-        return;
-      }
-
-      const parsed = parseNotificationText(text);
-      if (!parsed) {
-        setClipboardFeedback(`Could not detect monetary transaction in clipboard: "${text.slice(0, 40)}..."`);
-        return;
-      }
-
-      onSimulateNotification(text);
-      setClipboardFeedback(`Detected ${parsed.vendor} for ${currencySymbol}${parsed.amount.toFixed(2)}!`);
-      setTimeout(() => setClipboardFeedback(null), 4000);
-    } catch (e: any) {
-      setClipboardFeedback('Please allow clipboard permission when prompted, or paste below.');
-    }
   };
 
   const handleToggleRuleAutoPost = (ruleId: string) => {
@@ -216,7 +167,7 @@ export function WalletSyncModal({
         </div>
 
         {/* Tab Switcher */}
-        <div className="grid grid-cols-4 bg-[#0A0A0A] border-b border-white/5 p-1 text-center shrink-0">
+        <div className="grid grid-cols-3 bg-[#0A0A0A] border-b border-white/5 p-1 text-center shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('overview')}
@@ -227,18 +178,6 @@ export function WalletSyncModal({
             }`}
           >
             Overview
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('simulator')}
-            className={`py-2 text-[10px] sm:text-xs font-bold rounded-lg transition-all cursor-pointer border-0 flex items-center justify-center gap-1 ${
-              activeTab === 'simulator'
-                ? 'bg-white/10 text-emerald-400 shadow-xs'
-                : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            <Play size={11} className="fill-current" />
-            <span>Simulator</span>
           </button>
           <button
             type="button"
@@ -290,7 +229,7 @@ export function WalletSyncModal({
                       </span>
                     </div>
                     <p className="text-[11px] text-gray-300 leading-relaxed font-medium">
-                      Google Wallet, Samsung Wallet, and banking tap-to-pay are captured automatically in the background. When you tap to pay or receive a verified payment confirmation, it's recorded instantly!
+                      Google Wallet, Samsung Wallet, and Apple Pay are captured automatically in the background. When you tap to pay or receive a verified payment confirmation, it's recorded instantly!
                     </p>
                   </div>
                 ) : (
@@ -328,34 +267,6 @@ export function WalletSyncModal({
                   <p className="text-[11px] text-gray-300 leading-relaxed">
                     When a payment notification occurs, LooseBudget parses the merchant and amount. If it's a first-time vendor, you pick the category and choose whether future purchases should be auto-posted instantly!
                   </p>
-                </div>
-              )}
-
-              {/* Quick Actions Bar */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={handleCheckClipboard}
-                  className="p-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
-                  title="Check clipboard for copied notification receipt"
-                >
-                  <ClipboardPaste size={14} />
-                  <span>Check Clipboard for Transaction</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('simulator')}
-                  className="p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
-                >
-                  <Play size={13} className="text-emerald-400 fill-emerald-400" />
-                  <span>Open Interactive Test Simulator</span>
-                </button>
-              </div>
-
-              {clipboardFeedback && (
-                <div className="p-2 bg-emerald-950/40 border border-emerald-500/30 rounded-lg text-emerald-400 text-[11px] font-bold text-center animate-in fade-in">
-                  {clipboardFeedback}
                 </div>
               )}
 
@@ -401,37 +312,6 @@ export function WalletSyncModal({
                     />
                   </div>
 
-                  {/* Banking Apps */}
-                  <div className="p-3 bg-black/40 border border-white/5 rounded-xl flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-base">🏦</span>
-                      <div>
-                        <p className="text-xs font-bold text-white">Banking Apps</p>
-                        <p className="text-[9px] text-gray-500 font-mono">Chase, RBC, TD, BofA, Wells...</p>
-                      </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={settings.monitorBankApps ?? true}
-                      onChange={() => handleToggleSetting('monitorBankApps' as any)}
-                      className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500/30 accent-emerald-500 cursor-pointer"
-                    />
-                  </div>
-
-                  {/* SMS / Text Alerts (Excluded) */}
-                  <div className="p-3 bg-black/40 border border-white/5 rounded-xl flex items-center justify-between opacity-70">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-base">🛡️</span>
-                      <div>
-                        <p className="text-xs font-bold text-gray-300">SMS / Text Alerts (Excluded)</p>
-                        <p className="text-[9px] text-gray-500 font-mono">Bypassed to prevent missing-payee text alerts</p>
-                      </div>
-                    </div>
-                    <span className="text-[9px] font-mono font-bold text-gray-400 bg-white/5 px-2 py-0.5 rounded border border-white/10">
-                      Excluded
-                    </span>
-                  </div>
-
                   {/* Apple Wallet (For web/cross-device users) */}
                   <div className="p-3 bg-black/40 border border-white/5 rounded-xl flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
@@ -456,7 +336,7 @@ export function WalletSyncModal({
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-white">5-Min Duplicate Shield</p>
                         <p className="text-[9px] text-gray-400 leading-tight">
-                          Ignores 2nd alert if Wallet + Bank both fire
+                          Ignores rapid duplicate alerts for the same purchase
                         </p>
                       </div>
                     </div>
@@ -471,161 +351,10 @@ export function WalletSyncModal({
                 </div>
               </div>
 
-              {/* Recent Detections List */}
-              <div className="space-y-2 pt-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                    Recent Detected Activity
-                  </label>
-                  {recentNotifications.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        LocalDb.clearDetectedNotifications();
-                        setRecentNotifications([]);
-                      }}
-                      className="text-[9px] text-gray-500 hover:text-rose-400 font-bold cursor-pointer"
-                    >
-                      Clear Log
-                    </button>
-                  )}
-                </div>
-
-                {recentNotifications.length === 0 ? (
-                  <div className="p-4 bg-black/20 border border-white/5 rounded-xl text-center text-xs text-gray-500 font-medium">
-                    No notifications detected yet. Tap the <strong>Simulator</strong> tab above to run a sample test!
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                    {recentNotifications.slice(0, 10).map(n => (
-                      <div key={n.id} className="p-2.5 bg-black/40 border border-white/5 rounded-xl flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></div>
-                          <div className="min-w-0 text-left">
-                            <p className="font-bold text-white truncate">{n.vendor}</p>
-                            <p className="text-[9px] text-gray-500 font-mono">{n.appName || n.source} • {n.date}</p>
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <span className="font-mono font-bold text-emerald-400">
-                            {currencySymbol}{n.amount.toFixed(2)}
-                          </span>
-                          <p className="text-[8px] font-bold uppercase tracking-wider text-gray-400">
-                            {n.status === 'auto_posted' ? '⚡ Auto-Posted' : 'Approved'}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
             </div>
           )}
 
-          {/* TAB 2: INTERACTIVE TEST SIMULATOR */}
-          {activeTab === 'simulator' && (
-            <div className="space-y-4 animate-in fade-in duration-150">
-              
-              <div className="p-3 bg-blue-950/20 border border-blue-500/20 rounded-xl space-y-1">
-                <div className="flex items-center gap-1.5 text-blue-400 font-bold text-xs">
-                  <Play size={13} className="fill-current" />
-                  <span>Interactive Test Simulator</span>
-                </div>
-                <p className="text-[11px] text-gray-300 leading-relaxed">
-                  Try clicking any preset below. If it's your first time seeing that vendor, LooseBudget will prompt you to pick a category and decide whether to auto-post. Once auto-post is turned on, triggering it again posts immediately!
-                </p>
-              </div>
-
-              {/* Sample Presets Grid */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                  Click a Sample Digital Wallet Notification:
-                </label>
-
-                <div className="space-y-2">
-                  {SAMPLE_NOTIFICATION_PRESETS.map(preset => {
-                    const existingRule = LocalDb.findVendorRule(preset.vendor);
-                    const isAutoPost = existingRule?.autoPost;
-
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => {
-                          onSimulateNotification(preset.text, preset.source);
-                        }}
-                        className="w-full p-3 bg-black/40 hover:bg-black/60 border border-white/5 hover:border-emerald-500/30 rounded-xl text-left transition-all cursor-pointer group flex items-center justify-between"
-                      >
-                        <div className="min-w-0 pr-2">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors">
-                              {preset.title}
-                            </span>
-                            {existingRule ? (
-                              <span className={`text-[8px] font-mono font-bold px-1.5 py-0.2 rounded border ${
-                                isAutoPost 
-                                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' 
-                                  : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                              }`}>
-                                {isAutoPost ? '⚡ Will Auto-Post' : 'Requires Review'}
-                              </span>
-                            ) : (
-                              <span className="text-[8px] font-mono font-bold px-1.5 py-0.2 rounded bg-white/5 text-gray-400 border border-white/10">
-                                🆕 First Time
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[10.5px] text-gray-400 italic truncate font-sans">
-                            "{preset.text}"
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <span className="text-xs font-mono font-black text-emerald-400">
-                            {currencySymbol}{preset.amount.toFixed(2)}
-                          </span>
-                          <span className="block text-[9px] text-gray-500 font-bold group-hover:text-emerald-300 transition-colors">
-                            Simulate →
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Custom notification text simulator */}
-              <div className="space-y-2 pt-2 border-t border-white/5">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                  Or Paste / Type Any Custom Notification Text:
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={manualInput}
-                    onChange={(e) => setManualInput(e.target.value)}
-                    placeholder="e.g., Apple Pay: $14.95 paid at Blue Bottle Coffee"
-                    className="flex-1 bg-[#181818] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:border-emerald-500/50 outline-none"
-                  />
-                  <button
-                    type="button"
-                    disabled={!manualInput.trim()}
-                    onClick={() => {
-                      if (!manualInput.trim()) return;
-                      onSimulateNotification(manualInput.trim());
-                      setManualInput('');
-                    }}
-                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition-all cursor-pointer border-0"
-                  >
-                    Simulate
-                  </button>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* TAB 3: VENDOR AUTO-POST RULES */}
+          {/* TAB 2: VENDOR AUTO-POST RULES */}
           {activeTab === 'rules' && (
             <div className="space-y-4 animate-in fade-in duration-150">
               
@@ -711,7 +440,7 @@ export function WalletSyncModal({
                   <Tag size={20} className="mx-auto text-gray-600" />
                   <p className="text-xs text-gray-400 font-bold">No Retailer Rules Set</p>
                   <p className="text-[10px] text-gray-500 max-w-xs mx-auto leading-normal">
-                    When you receive notifications or test the simulator, your vendor choices will be saved here automatically!
+                    When you tap to pay or ingest wallet transactions, your vendor categorization choices will be saved here automatically!
                   </p>
                 </div>
               ) : (
@@ -799,7 +528,7 @@ export function WalletSyncModal({
                         Android 1-Tap Auto-Detect (No Webhooks)
                       </h4>
                       <p className="text-[10px] text-emerald-400 font-semibold">
-                        Native background listener for Google Wallet, Samsung Pay & Banks
+                        Native background listener for Google Wallet & Samsung Pay
                       </p>
                     </div>
                   </div>
@@ -815,7 +544,7 @@ export function WalletSyncModal({
                 </div>
 
                 <p className="text-xs text-gray-300 leading-relaxed">
-                  LooseBudget can automatically detect transactions in the background when you tap your phone to pay or receive purchase notifications from your bank.
+                  LooseBudget can automatically detect transactions in the background when you tap your phone to pay or receive digital wallet payment notifications.
                 </p>
 
                 <div className="p-3 bg-black/60 border border-white/10 rounded-xl space-y-2">
@@ -841,61 +570,42 @@ export function WalletSyncModal({
                 </div>
               </div>
 
-              {/* COLLAPSIBLE ADVANCED WEBHOOKS & IOS SHORTCUTS (For iPhone or automation power users) */}
-              <details className="group p-3 bg-black/40 border border-white/5 hover:border-white/10 rounded-xl space-y-3 transition-all">
-                <summary className="cursor-pointer text-xs font-bold text-gray-400 hover:text-white flex items-center justify-between select-none">
-                  <div className="flex items-center gap-2">
-                    <span>⚙️</span>
-                    <span>Advanced: Webhook URL & iOS Shortcuts (Optional)</span>
-                  </div>
-                  <ChevronDown size={14} className="group-open:rotate-180 transition-transform text-gray-400" />
-                </summary>
-
-                <div className="pt-2 space-y-3 border-t border-white/5">
-                  <p className="text-[11px] text-gray-400 leading-relaxed">
-                    If you use an iPhone (Apple Pay Shortcuts) or want to trigger ingestion from external servers, you can send HTTP POST requests to your personal webhook:
-                  </p>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">
-                        Personal Webhook URL
-                      </label>
-                      <button
-                        type="button"
-                        onClick={handleCopyWebhook}
-                        className="text-[9px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
-                      >
-                        {copiedWebhook ? <Check size={11} className="stroke-[3]" /> : <Copy size={11} />}
-                        <span>{copiedWebhook ? 'Copied URL!' : 'Copy URL'}</span>
-                      </button>
-                    </div>
-
-                    <div className="p-2 bg-[#0A0A0A] border border-white/10 rounded-lg font-mono text-[10px] text-gray-300 break-all select-all">
-                      {webhookUrl}
-                    </div>
-                  </div>
-
-                  {/* iOS Shortcuts Instructions */}
-                  <div className="p-3 bg-black/60 border border-white/5 rounded-xl space-y-2 text-left">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-white">
-                      <span>🍎</span>
-                      <span>iPhone Setup (Apple Pay Shortcuts Automation)</span>
-                    </div>
-                    <ol className="text-[11px] text-gray-300 list-decimal list-inside space-y-1 pl-1">
-                      <li>Open the <strong className="text-white">Shortcuts</strong> app on your iPhone.</li>
-                      <li>Go to <strong className="text-white">Automation</strong> &rarr; <strong className="text-white">New Automation</strong> &rarr; select <strong className="text-emerald-400">Transaction</strong>.</li>
-                      <li>Select <strong>Run Immediately</strong>.</li>
-                      <li>Add action <strong className="text-white">Get Contents of URL</strong>:
-                        <ul className="list-disc list-inside pl-3 pt-0.5 text-gray-400 text-[10px]">
-                          <li>Method: <strong>POST</strong></li>
-                          <li>Request Body: <strong>JSON</strong> with <code className="text-emerald-400">vendor</code> and <code className="text-emerald-400">amount</code>.</li>
-                        </ul>
-                      </li>
-                    </ol>
+              {/* APPLE I-PHONE SETUP */}
+              <div className="p-4 bg-black/40 border border-white/10 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🍎</span>
+                  <div>
+                    <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                      APPLE I-PHONE SETUP
+                    </h4>
+                    <p className="text-[10px] text-gray-400 font-medium">
+                      Automate with Apple Pay & iOS Shortcuts
+                    </p>
                   </div>
                 </div>
-              </details>
+
+                <div className="p-3 bg-black/60 border border-white/5 rounded-xl space-y-2 text-left">
+                  <ol className="text-xs text-gray-300 list-decimal list-inside space-y-2 pl-0.5">
+                    <li>
+                      Open the <strong className="text-white">Shortcuts</strong> app on your iPhone.
+                    </li>
+                    <li>
+                      Go to <strong className="text-white">Automation</strong> &rarr; <strong className="text-white">New Automation</strong> &rarr; select <strong className="text-emerald-400">Transaction</strong> (Apple Pay).
+                    </li>
+                    <li>
+                      Select your card and choose <strong className="text-emerald-400">Run Immediately</strong>.
+                    </li>
+                    <li>
+                      Add the action <strong className="text-white">Open App</strong> and select <strong className="text-white">ExpenseTrack</strong> so transactions log when you tap to pay.
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="flex items-center gap-2 text-[10px] text-gray-400 pt-0.5">
+                  <ShieldCheck size={13} className="text-emerald-400 shrink-0" />
+                  <span>Runs entirely on your device with no external accounts needed.</span>
+                </div>
+              </div>
 
             </div>
           )}

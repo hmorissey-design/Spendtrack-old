@@ -363,8 +363,8 @@ export function ExpenseForm({ categories, savingsGoals, onSubmit, onClose, defau
         </div>
       )}
 
-      {/* Mobile-only: Tap-to-pay wallet auto-detect (hidden on desktop to avoid confusion) */}
-      {!expenseToEdit && onOpenWalletSync && isMobile && (
+      {/* Tap-to-pay wallet auto-detect */}
+      {!expenseToEdit && onOpenWalletSync && (
         <div className="mb-2.5 flex items-center justify-between bg-gradient-to-r from-emerald-950/40 to-slate-900 border border-emerald-500/20 rounded-xl px-3 py-1.5 shadow-xs">
           <div className="flex items-center gap-2 min-w-0 pr-1">
             <Smartphone size={13} className="text-emerald-400 shrink-0" />
