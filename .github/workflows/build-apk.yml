@@ -31,6 +31,10 @@ jobs:
         with:
           packages: 'platforms;android-35 platforms;android-36 build-tools;35.0.0 build-tools;36.0.0'
 
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | sdkmanager --licenses 2>/dev/null || true
+
       - name: Install Node Dependencies
         run: npm ci || npm install
 
@@ -46,7 +50,6 @@ jobs:
       - name: Build Android APK
         shell: bash
         run: |
-          set -e
           cd android
           ./gradlew assembleDebug --stacktrace --no-daemon
 
