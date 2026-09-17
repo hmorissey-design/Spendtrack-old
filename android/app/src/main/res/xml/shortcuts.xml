@@ -5,8 +5,8 @@
         android:shortcutId="add_expense_shortcut"
         android:enabled="true"
         android:icon="@mipmap/ic_launcher"
-        android:shortLabel="@string/shortcut_add_expense_short"
-        android:longLabel="@string/shortcut_add_expense_long">
+        android:shortcutShortLabel="@string/shortcut_add_expense_short"
+        android:shortcutLongLabel="@string/shortcut_add_expense_long">
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.loosebudget.app"
