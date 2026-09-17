@@ -150,8 +150,8 @@ function serverParseNotificationText(text, sourceHint) {
     } catch (e) {
     }
   }
-  let source = sourceHint || "sms_bank";
-  let appName = "Phone Notification";
+  let source = sourceHint || "digital_wallet";
+  let appName = "Wallet Notification";
   const lower = trimmed.toLowerCase();
   if (lower.includes("google wallet") || lower.includes("google pay") || lower.includes("gpay")) {
     source = "google_wallet";
@@ -162,11 +162,8 @@ function serverParseNotificationText(text, sourceHint) {
   } else if (lower.includes("samsung wallet") || lower.includes("samsung pay")) {
     source = "samsung_wallet";
     appName = "Samsung Wallet";
-  } else if (lower.includes("chase") || lower.includes("wells fargo") || lower.includes("bank of america") || lower.includes("amex") || lower.includes("citi")) {
-    source = "sms_bank";
-    appName = "Bank SMS";
   }
-  const amountRegex = /(?:(\$|USD|CAD|EUR|GBP|€|£)\s*(\d+(?:[.,]\d{2})?)|(\d+(?:[.,]\d{2})?)\s*(\$|USD|CAD|EUR|GBP|€|£))/i;
+  const amountRegex = /(?:(\$|USD|CAD|EUR|GBP|€|£)\s*(\d+(?:[.,]\d{1,2})?)|(\d+(?:[.,]\d{1,2})?)\s*(\$|USD|CAD|EUR|GBP|€|£))/i;
   const amountMatch = trimmed.match(amountRegex);
   let rawAmount = 0;
   let currency = "$";
@@ -179,30 +176,60 @@ function serverParseNotificationText(text, sourceHint) {
       rawAmount = parseFloat(amountMatch[3].replace(",", "."));
     }
   } else {
-    const fallbackNum = trimmed.match(/\b(\d+\.\d{2})\b/);
+    const fallbackNum = trimmed.match(/\b(\d+(?:\.\d{2}))\b/);
     if (fallbackNum) rawAmount = parseFloat(fallbackNum[1]);
   }
   if (isNaN(rawAmount) || rawAmount <= 0) return null;
   let rawVendor = "";
-  const atMatch = trimmed.match(/(?:at|with)\s+([A-Za-z0-9\s'&.*#\-]+?)(?:\s+on|\s+with|\s+for|\s+card|\s+ending|\.|\,|$)/i);
-  const toMatch = trimmed.match(/(?:paid|sent|transfer(?:red)? to)\s+(?:(?:\$|\w+)?\s*\d+(?:\.\d{2})?\s*(?:to\s+)?)?([A-Za-z0-9\s'&.*#\-]+?)(?:\s+with|\s+using|\s+on|\s+from|\.|\,|$)/i);
-  const fromMatch = trimmed.match(/(?:charge|transaction|purchase)\s+from\s+([A-Za-z0-9\s'&.*#\-]+?)(?:\s+for|\s+on|\.|\,|$)/i);
-  const prefixMatch = trimmed.match(/(?:Google Wallet|Google Pay|Apple Pay|Samsung Pay|Samsung Wallet):\s*(?:Paid\s*)?([A-Za-z0-9\s'&.*#\-]+?)(?:\s+for|\s+\$|\s*\d|\.|\,|$)/i);
-  if (atMatch && atMatch[1]?.trim()) {
-    rawVendor = atMatch[1];
-  } else if (toMatch && toMatch[1]?.trim()) {
-    rawVendor = toMatch[1];
-  } else if (fromMatch && fromMatch[1]?.trim()) {
-    rawVendor = fromMatch[1];
-  } else if (prefixMatch && prefixMatch[1]?.trim()) {
-    rawVendor = prefixMatch[1];
-  } else {
-    rawVendor = "Unknown Merchant";
+  const linesOrParts = trimmed.split(/[\n\r]+|:\s+|\s+-\s+|\s+•\s+/);
+  if (linesOrParts.length >= 2) {
+    const firstPart = linesOrParts[0].trim();
+    const isFirstGeneric = /^(google wallet|google pay|apple pay|apple wallet|samsung pay|samsung wallet|messages|sms|transaction alert)$/i.test(firstPart);
+    if (!isFirstGeneric && firstPart.length >= 2 && !firstPart.match(/\$\d+|\b\d+\.\d{2}\b/)) {
+      rawVendor = firstPart;
+    } else if (isFirstGeneric && linesOrParts.length >= 3) {
+      const secondPart = linesOrParts[1].trim();
+      if (secondPart.length >= 2 && !secondPart.match(/\$\d+|\b\d+\.\d{2}\b/)) {
+        rawVendor = secondPart;
+      }
+    }
   }
-  let vendor = rawVendor.replace(/^(sq\s*\*|tst\s*\*|sp\s*\*|paypal\s*\*|amzn\s*mktp\s*\*)/i, "").trim();
+  if (!rawVendor) {
+    const atMatch = trimmed.match(/\bat\s+([A-Za-z0-9\s'&.*#\-]+?)(?:\s+(?:on|with|for|using|via|card|ending|\d{4})|\.|\,|$|\n)/i);
+    if (atMatch && atMatch[1]?.trim()) rawVendor = atMatch[1];
+  }
+  if (!rawVendor) {
+    const toMatch = trimmed.match(/(?:paid|sent|transfer(?:red)? to)\s+(?:(?:\$|\w+)?\s*\d+(?:\.\d{2})?\s*(?:to\s+)?)?([A-Za-z0-9\s'&.*#\-]+?)(?:\s+(?:with|using|on|via|from)|\.|\,|$|\n)/i);
+    if (toMatch && toMatch[1]?.trim()) rawVendor = toMatch[1];
+  }
+  if (!rawVendor) {
+    const fromMatch = trimmed.match(/(?:charge|transaction|purchase)\s+from\s+([A-Za-z0-9\s'&.*#\-]+?)(?:\s+(?:for|on|with|via)|\.|\,|$|\n)/i);
+    if (fromMatch && fromMatch[1]?.trim()) rawVendor = fromMatch[1];
+  }
+  if (!rawVendor) {
+    const preAmountMatch = trimmed.match(/^([A-Za-z0-9\s'&.*#\-]{2,40}?)\s+(?:\$|USD|CAD|EUR|GBP|€|£)?\s*\d+(?:\.\d{2})?\s+with\b/i);
+    if (preAmountMatch && preAmountMatch[1]?.trim()) {
+      const candidate = preAmountMatch[1].trim();
+      if (!/^(transaction|purchase|charge|payment|alert)$/i.test(candidate)) {
+        rawVendor = candidate;
+      }
+    }
+  }
+  if (!rawVendor) {
+    const bankCardMatch = trimmed.match(/on\s+your\s+([A-Za-z0-9\s'&.*#\-]+?)\s+(?:ending in|ending with|\d{4}|on\s+\w+)/i);
+    if (bankCardMatch && bankCardMatch[1]?.trim()) rawVendor = bankCardMatch[1];
+  }
+  let vendor = rawVendor.replace(/^["'“”‘’«»`:\-•\s]+|["'“”‘’«»`:\-•\s]+$/g, "").trim();
+  vendor = vendor.replace(/^(sq\s*\*|tst\s*\*|sp\s*\*|paypal\s*\*|amzn\s*mktp\s*\*)/i, "").trim();
+  vendor = vendor.replace(/^(google wallet|google pay|apple pay|apple wallet|samsung pay|samsung wallet|messages|sms|transaction alert)\s*[:\-•]\s*/i, "").trim();
   vendor = vendor.replace(/#\s*\d+/g, "").trim();
+  vendor = vendor.replace(/^["'“”‘’«»`:\-•\s]+|["'“”‘’«»`:\-•\s]+$/g, "").trim();
+  const vLower = vendor.toLowerCase();
+  if (!vendor || vendor.length < 2 || vLower === "merchant" || vLower === "unknown merchant" || vLower === "google wallet" || vLower === "apple pay" || vLower === "samsung wallet" || vLower === "messages" || vLower.includes("card ending") || vLower.includes("fraud alert") || vLower.includes("account balance")) {
+    return null;
+  }
   return {
-    vendor: vendor || "Merchant",
+    vendor,
     amount: rawAmount,
     currency: currency || "$",
     date: today,
