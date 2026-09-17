@@ -17,6 +17,14 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
+    const msg = error?.message || '';
+    if (
+      msg.includes('Database is closing') ||
+      msg.includes('closing/hidden') ||
+      msg.includes('connection is closing')
+    ) {
+      return { hasError: false, error: null };
+    }
     return { hasError: true, error };
   }
 

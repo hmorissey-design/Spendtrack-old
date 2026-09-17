@@ -570,6 +570,70 @@ export function WalletSyncModal({
                 </div>
               </div>
 
+              {/* GOOGLE ASSISTANT / GEMINI & VOICE SHORTCUTS */}
+              <div className="p-4 bg-gradient-to-br from-indigo-950/40 via-black to-blue-950/20 border border-indigo-500/30 rounded-2xl space-y-3 shadow-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🎙️</span>
+                  <div>
+                    <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                      Google Assistant, Gemini & Voice Routines
+                    </h4>
+                    <p className="text-[10px] text-indigo-400 font-semibold">
+                      Control via custom deep link URL schemes & voice prompts
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-gray-300 leading-relaxed">
+                  LooseBudget supports Android Deep Linking (<code className="px-1.5 py-0.5 rounded bg-white/10 text-indigo-300 font-mono text-[10px]">expensetrack://add</code>). You can trigger it from Google Assistant routines, Gemini, Tasker, Macrodroid, or home screen shortcuts.
+                </p>
+
+                <div className="p-3 bg-black/60 border border-white/10 rounded-xl space-y-2.5 text-left">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Supported URL Formats:</p>
+                  
+                  <div className="space-y-2">
+                    <div className="p-2 bg-white/5 rounded-lg border border-white/5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-white">1. Direct Parameters</span>
+                        <span className="text-[9px] text-gray-400">Prefills & opens form</span>
+                      </div>
+                      <code className="text-[10px] font-mono text-emerald-400 break-all select-all block mt-1">
+                        expensetrack://add?amount=15.50&amp;vendor=Starbucks&amp;category=Coffee
+                      </code>
+                    </div>
+
+                    <div className="p-2 bg-white/5 rounded-lg border border-white/5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-white">2. Natural Voice Text</span>
+                        <span className="text-[9px] text-gray-400">Auto-parses voice speech</span>
+                      </div>
+                      <code className="text-[10px] font-mono text-indigo-400 break-all select-all block mt-1">
+                        expensetrack://add?text=Spent%2014.50%20at%20Subway
+                      </code>
+                    </div>
+
+                    <div className="p-2 bg-white/5 rounded-lg border border-white/5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-white">3. Hands-Free Instant Auto-Save</span>
+                        <span className="text-[9px] text-emerald-400 font-bold">Logs instantly</span>
+                      </div>
+                      <code className="text-[10px] font-mono text-amber-300 break-all select-all block mt-1">
+                        expensetrack://add?amount=12.00&amp;vendor=Tim%20Hortons&amp;auto=true
+                      </code>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-indigo-950/20 border border-indigo-500/20 rounded-xl space-y-1.5 text-left">
+                  <p className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider">Setting up Google Assistant Routine:</p>
+                  <ol className="text-xs text-gray-300 list-decimal list-inside space-y-1 pl-0.5">
+                    <li>Open the <strong className="text-white">Google Assistant</strong> app &rarr; go to <strong className="text-white">Settings &rarr; Routines</strong>.</li>
+                    <li>Add a starter trigger: <em className="text-indigo-300">"When I say: Add Expense"</em>.</li>
+                    <li>Add action &rarr; <strong className="text-white">Open link</strong>: paste <code className="text-emerald-400 text-[10px]">expensetrack://add</code>.</li>
+                  </ol>
+                </div>
+              </div>
+
               {/* APPLE I-PHONE SETUP */}
               <div className="p-4 bg-black/40 border border-white/10 rounded-2xl space-y-3">
                 <div className="flex items-center gap-2">

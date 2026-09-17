@@ -14,6 +14,9 @@ import {
 } from 'firebase/auth';
 import { 
   getFirestore, 
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   collection, 
   doc, 
   getDocs, 
@@ -42,10 +45,26 @@ googleProvider.setCustomParameters({
 
 const config = firebaseConfig as Record<string, string | undefined>;
 
-// Initialize Firestore with specified databaseId if present
-export const db = config.firestoreDatabaseId
-  ? getFirestore(app, config.firestoreDatabaseId)
-  : getFirestore(app);
+// Initialize Firestore safely with multi-tab coordinator & undefined property tolerance
+let firestoreDb: ReturnType<typeof getFirestore>;
+try {
+  firestoreDb = initializeFirestore(
+    app,
+    {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager()
+      }),
+      ignoreUndefinedProperties: true
+    },
+    config.firestoreDatabaseId || undefined
+  );
+} catch {
+  firestoreDb = config.firestoreDatabaseId
+    ? getFirestore(app, config.firestoreDatabaseId)
+    : getFirestore(app);
+}
+
+export const db = firestoreDb;
 
 export {
   collection,

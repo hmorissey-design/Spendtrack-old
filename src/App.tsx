@@ -62,8 +62,14 @@ import { AuthModal } from './components/AuthModal';
 import { SubscriptionModal } from './components/SubscriptionModal';
 import { FirstTimeVendorModal } from './components/FirstTimeVendorModal';
 import { WalletSyncModal } from './components/WalletSyncModal';
-import { parseNotificationText, suggestCategoryForVendor } from './utils/notificationParser';
+import { 
+  parseNotificationText, 
+  suggestCategoryForVendor, 
+  cleanVendorName, 
+  isInvalidVendor 
+} from './utils/notificationParser';
 import { NativeWalletBridge } from './utils/nativeWalletBridge';
+import { DeepLinkManager, DeepLinkExpensePayload } from './utils/deepLink';
 import { Capacitor } from '@capacitor/core';
 import { TransactionDeduplicator } from './utils/deduplication';
 import { HelpSection } from './components/HelpSection';
@@ -497,6 +503,13 @@ export default function App() {
     }
   });
   const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [deepLinkPrefill, setDeepLinkPrefill] = useState<{
+    amount?: number | string;
+    note?: string;
+    category?: string;
+    date?: string;
+    paymentMethod?: 'cash' | 'card';
+  } | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
   const [defaultCategoryId, setDefaultCategoryIdState] = useState<string>('');
@@ -1606,55 +1619,81 @@ Date: ${new Date().toLocaleString()}
     sourceHint?: WalletSource,
     remoteItem?: any
   ) => {
-    const parsed = parseNotificationText(rawText, sourceHint);
+    let parsed = parseNotificationText(rawText, sourceHint);
+
+    // Fallback: If text regex couldn't resolve, but remoteItem or native tx provided structured vendor & amount
+    if (!parsed && remoteItem && typeof remoteItem === 'object') {
+      const v = remoteItem.vendor || remoteItem.merchant || remoteItem.title;
+      const a = parseFloat(remoteItem.amount || remoteItem.value || remoteItem.total);
+      if (v && !isNaN(a) && a > 0) {
+        const cleaned = cleanVendorName(String(v));
+        if (!isInvalidVendor(cleaned)) {
+          parsed = {
+            vendor: cleaned,
+            amount: Math.abs(a),
+            currency: remoteItem.currency || currencySymbol,
+            date: remoteItem.date || new Date().toISOString().split('T')[0],
+            source: (remoteItem.source as WalletSource) || sourceHint || 'google_wallet',
+            appName: remoteItem.appName || 'Wallet Sync',
+            cardLast4: remoteItem.cardLast4,
+            confidence: 0.95
+          };
+        }
+      }
+    }
+
     if (!parsed) {
-      console.warn('Could not parse transaction notification:', rawText);
+      console.warn('Could not parse transaction notification:', rawText, remoteItem);
       return;
     }
 
+    const syncSettings = LocalDb.getWalletSyncSettings();
+
     // 1. Smart 5-Minute Deduplication Check (e.g. Google Wallet + Bank SMS both firing)
-    const dupCheck = TransactionDeduplicator.checkDuplicate(parsed.amount, parsed.vendor, parsed.source);
-    if (dupCheck.isDuplicate) {
-      console.log('Deduplication hit:', dupCheck.reason);
-      
-      // Acknowledge remote item if it came from server queue
-      if (remoteItem?.id) {
-        fetch('/api/notifications/ack', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: remoteItem.id })
-        }).catch(() => {});
+    if (syncSettings.duplicateProtection !== false) {
+      const dupCheck = TransactionDeduplicator.checkDuplicate(parsed.amount, parsed.vendor, parsed.source);
+      if (dupCheck.isDuplicate) {
+        console.log('Deduplication hit:', dupCheck.reason);
+        
+        // Acknowledge remote item if it came from server queue
+        if (remoteItem?.id) {
+          fetch('/api/notifications/ack', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: remoteItem.id })
+          }).catch(() => {});
+        }
+
+        // Log in audit trail as duplicate
+        LocalDb.saveDetectedNotification({
+          id: `notif_dup_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          rawText,
+          vendor: parsed.vendor,
+          amount: parsed.amount,
+          currency: parsed.currency || currencySymbol,
+          date: parsed.date || new Date().toISOString().split('T')[0],
+          source: parsed.source,
+          appName: parsed.appName,
+          status: 'ignored',
+          assignedCategoryId: 'duplicate',
+          detectedAt: Date.now()
+        });
+
+        // Show deduplication toast notification
+        setAutoPostToast({
+          message: `🛡️ Duplicate Filtered: ${parsed.vendor} (${currencySymbol}${parsed.amount.toFixed(2)}) was already captured ${dupCheck.timeDiffSeconds}s ago via ${dupCheck.matchedTransaction?.source || 'another alert'}.`,
+          vendor: parsed.vendor,
+          amount: parsed.amount,
+          categoryName: 'Duplicate Shield',
+          expenseId: 'duplicate'
+        });
+
+        setTimeout(() => {
+          setAutoPostToast(prev => prev?.expenseId === 'duplicate' ? null : prev);
+        }, 6000);
+
+        return;
       }
-
-      // Log in audit trail as duplicate
-      LocalDb.saveDetectedNotification({
-        id: `notif_dup_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-        rawText,
-        vendor: parsed.vendor,
-        amount: parsed.amount,
-        currency: parsed.currency || currencySymbol,
-        date: parsed.date || new Date().toISOString().split('T')[0],
-        source: parsed.source,
-        appName: parsed.appName,
-        status: 'ignored',
-        assignedCategoryId: 'duplicate',
-        detectedAt: Date.now()
-      });
-
-      // Show deduplication toast notification
-      setAutoPostToast({
-        message: `🛡️ Duplicate Filtered: ${parsed.vendor} (${currencySymbol}${parsed.amount.toFixed(2)}) was already captured ${dupCheck.timeDiffSeconds}s ago via ${dupCheck.matchedTransaction?.source || 'another alert'}.`,
-        vendor: parsed.vendor,
-        amount: parsed.amount,
-        categoryName: 'Duplicate Shield',
-        expenseId: 'duplicate'
-      });
-
-      setTimeout(() => {
-        setAutoPostToast(prev => prev?.expenseId === 'duplicate' ? null : prev);
-      }, 6000);
-
-      return;
     }
 
     // Check if we already have a vendor rule configured
@@ -1872,9 +1911,9 @@ Date: ${new Date().toLocaleString()}
       if (pending && pending.length > 0) {
         for (const tx of pending) {
           handleProcessNotification(
-            tx.rawText || `${tx.vendor} ${tx.amount}`,
+            tx.rawText || `${tx.vendor}: ${tx.currency || '$'}${typeof tx.amount === 'number' ? tx.amount.toFixed(2) : tx.amount}`,
             tx.source,
-            { id: tx.id }
+            tx
           );
         }
       }
@@ -1883,9 +1922,9 @@ Date: ${new Date().toLocaleString()}
     // 2. Subscribe to real-time events while app is open
     const unsubNative = NativeWalletBridge.subscribe(tx => {
       handleProcessNotification(
-        tx.rawText || `${tx.vendor} ${tx.amount}`,
+        tx.rawText || `${tx.vendor}: ${tx.currency || '$'}${typeof tx.amount === 'number' ? tx.amount.toFixed(2) : tx.amount}`,
         tx.source,
-        { id: tx.id }
+        tx
       );
     });
 
@@ -1893,6 +1932,83 @@ Date: ${new Date().toLocaleString()}
       unsubNative();
     };
   }, [categories, selectedMonth, currencySymbol]);
+
+  // Deep Link URL Scheme Listener (expensetrack://add or https://.../?action=add)
+  // Supports Google Assistant routines, Tasker, Macrodroid, and voice prompts
+  useEffect(() => {
+    const unsubDeepLink = DeepLinkManager.subscribe((payload: DeepLinkExpensePayload) => {
+      console.log('Received deep link in App:', payload);
+      
+      if (!payload) return;
+
+      // 1. Instant Auto-Save Mode: expensetrack://add?amount=12.50&vendor=Starbucks&auto=true
+      if (payload.autoSave && payload.amount && (payload.vendor || payload.note)) {
+        const vendorName = payload.vendor || payload.note || 'Voice Expense';
+        
+        let chosenCatId = defaultCategoryId || 'cat_uncategorized';
+        if (payload.category) {
+          const matched = categories.find(c => c.id === payload.category || c.name.toLowerCase() === payload.category?.toLowerCase());
+          if (matched) chosenCatId = matched.id;
+        } else {
+          const suggestedId = suggestCategoryForVendor(vendorName, categories);
+          if (suggestedId) chosenCatId = suggestedId;
+        }
+
+        const newExpenseData = {
+          amount: payload.amount,
+          category: chosenCatId,
+          date: payload.date || new Date().toISOString().split('T')[0],
+          note: payload.note || vendorName,
+          paymentMethod: payload.paymentMethod || 'card'
+        };
+
+        const added = LocalDb.addExpense(newExpenseData);
+        setExpenses(LocalDb.getExpenses());
+        setCurrentBudget(LocalDb.getBudgetForMonth(selectedMonth));
+
+        const user = auth.currentUser;
+        if (user) {
+          CloudDb.saveExpenseToCloud(user.uid, added).catch(console.error);
+        }
+
+        const catName = categories.find(c => c.id === chosenCatId)?.name || 'Uncategorized';
+
+        setAutoPostToast({
+          message: `🎙️ Voice / Shortcut Logged: ${vendorName} (${currencySymbol}${payload.amount.toFixed(2)}) → ${catName}.`,
+          vendor: vendorName,
+          amount: payload.amount,
+          categoryName: catName,
+          expenseId: added.id
+        });
+
+        setTimeout(() => {
+          setAutoPostToast(prev => prev?.expenseId === added.id ? null : prev);
+        }, 6000);
+
+      } else {
+        // 2. Pre-fill Add Expense modal so user can confirm or customize
+        const prefillData: any = {};
+        if (payload.amount !== undefined) prefillData.amount = payload.amount;
+        if (payload.vendor || payload.note) prefillData.note = payload.vendor || payload.note;
+        if (payload.date) prefillData.date = payload.date;
+        if (payload.paymentMethod) prefillData.paymentMethod = payload.paymentMethod;
+        if (payload.category) {
+          const matched = categories.find(c => c.id === payload.category || c.name.toLowerCase() === payload.category?.toLowerCase());
+          if (matched) prefillData.category = matched.id;
+        } else if (payload.vendor || payload.note) {
+          const suggestedId = suggestCategoryForVendor(payload.vendor || payload.note || '', categories);
+          if (suggestedId) prefillData.category = suggestedId;
+        }
+
+        setDeepLinkPrefill(prefillData);
+        setShowAddForm(true);
+      }
+    });
+
+    return () => {
+      unsubDeepLink();
+    };
+  }, [categories, defaultCategoryId, selectedMonth, currencySymbol]);
 
   const handleSaveEditedExpense = (updatedData: Omit<Expense, 'id' | 'createdAt'>) => {
     if (editingExpense) {
@@ -2998,8 +3114,15 @@ Date: ${new Date().toLocaleString()}
                   categories={categories} 
                   savingsGoals={savingsGoals}
                   onOpenCategoryManager={() => setShowCategoryManager(true)}
-                  onSubmit={handleAddExpense} 
-                  onClose={() => setShowAddForm(false)} 
+                  initialPrefill={deepLinkPrefill || undefined}
+                  onSubmit={(exp) => {
+                    handleAddExpense(exp);
+                    setDeepLinkPrefill(null);
+                  }} 
+                  onClose={() => {
+                    setShowAddForm(false);
+                    setDeepLinkPrefill(null);
+                  }} 
                   defaultCategoryId={defaultCategoryId}
                   onOpenWalletSync={() => {
                     setShowAddForm(false);

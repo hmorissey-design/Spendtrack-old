@@ -124,6 +124,27 @@ When you push code to GitHub:
 - `/.github/workflows/build-apk.yml` builds `app-release-unsigned.apk` automatically under your repository's **Actions** tab.
 - Download the APK, host it on your landing page (e.g. `loosebudget.com/download/loosebudget.apk`), and users can install it on any Android device!
 
+---
+
+## 🎙️ Step 6: Android Deep Linking & Voice Assistant Shortcuts
+
+### **Supported URL Schemes**
+- `expensetrack://add` & `loosebudget://add`
+- Web: `https://app.loosebudget.com/add` and `https://app.loosebudget.com/?action=add`
+
+### **Supported Parameters**
+1. **Direct Parameters:**
+   `expensetrack://add?amount=15.50&vendor=Starbucks&category=Coffee&note=Latte`
+2. **Natural Language Voice Dictation (Google Assistant / Gemini):**
+   `expensetrack://add?text=Spent%2014.50%20at%20Subway` (Automatically extracts amount and vendor name)
+3. **Hands-Free Instant Auto-Save:**
+   `expensetrack://add?amount=12.00&vendor=Tim%20Hortons&auto=true` (Instantly saves and displays toast with Undo)
+
+### **Google Assistant & Tasker Setup**
+- **Google Assistant Routine:** Add trigger *"When I say: Add Expense"* -> Action *"Open link: expensetrack://add"*.
+- **Android App Shortcuts:** Included in `shortcuts.xml` for 1-tap home screen quick access.
+
+
 
 
 

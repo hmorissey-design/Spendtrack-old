@@ -16,6 +16,13 @@ interface ExpenseFormProps {
   onClose?: () => void;
   defaultCategoryId?: string;
   expenseToEdit?: Expense;
+  initialPrefill?: {
+    amount?: number | string;
+    note?: string;
+    category?: string;
+    date?: string;
+    paymentMethod?: 'cash' | 'card';
+  };
   onOpenCategoryManager?: () => void;
   onOpenWalletSync?: () => void;
 }
@@ -41,16 +48,28 @@ const getDarkTextColor = (colorStr: string) => {
   return 'text-slate-800';
 };
 
-export function ExpenseForm({ categories, savingsGoals, onSubmit, onClose, defaultCategoryId, expenseToEdit, onOpenCategoryManager, onOpenWalletSync }: ExpenseFormProps) {
+export function ExpenseForm({ categories, savingsGoals, onSubmit, onClose, defaultCategoryId, expenseToEdit, initialPrefill, onOpenCategoryManager, onOpenWalletSync }: ExpenseFormProps) {
   const isMobile = useIsMobileDevice();
-  const [amount, setAmount] = useState<string>(expenseToEdit ? expenseToEdit.amount.toString() : '');
-  const [selectedCategory, setSelectedCategory] = useState<string>(
+  const [amount, setAmount] = useState<string>(
     expenseToEdit 
-      ? expenseToEdit.category 
-      : (categories.some(c => c.id === 'cat_uncategorized' && !c.isHidden)
-          ? 'cat_uncategorized'
-          : (categories.find(c => !c.isHidden)?.id || 'cat_uncategorized'))
+      ? expenseToEdit.amount.toString() 
+      : (initialPrefill?.amount !== undefined && initialPrefill.amount !== '' ? String(initialPrefill.amount) : '')
   );
+  
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => {
+    if (expenseToEdit) return expenseToEdit.category;
+    if (initialPrefill?.category) {
+      // Try finding matching category by ID or name
+      const targetCat = categories.find(c => c.id === initialPrefill.category || c.name.toLowerCase() === initialPrefill.category?.toLowerCase());
+      if (targetCat) return targetCat.id;
+    }
+    if (defaultCategoryId && categories.some(c => c.id === defaultCategoryId && !c.isHidden)) {
+      return defaultCategoryId;
+    }
+    return categories.some(c => c.id === 'cat_uncategorized' && !c.isHidden)
+      ? 'cat_uncategorized'
+      : (categories.find(c => !c.isHidden)?.id || 'cat_uncategorized');
+  });
 
   // Compute selected Savings Goal capacity
   const selectedSavingsGoal = selectedCategory.startsWith('SAVINGS_') && savingsGoals
@@ -59,9 +78,21 @@ export function ExpenseForm({ categories, savingsGoals, onSubmit, onClose, defau
   const currentGoalBalance = selectedSavingsGoal ? (selectedSavingsGoal.currentAmount ?? selectedSavingsGoal.amount ?? 0) : 0;
   const editingOriginalAmount = (expenseToEdit && expenseToEdit.category === selectedCategory) ? expenseToEdit.amount : 0;
   const availableSavingsCapacity = currentGoalBalance + editingOriginalAmount;
-  const [note, setNote] = useState<string>(expenseToEdit ? expenseToEdit.note : '');
-  const [date, setDate] = useState<string>(expenseToEdit ? expenseToEdit.date : getLocalYYYYMMDD()); // Today's date YYYY-MM-DD
-  const [paymentMethod, setPaymentMethod] = useState<Expense['paymentMethod']>(expenseToEdit ? expenseToEdit.paymentMethod : 'card');
+  const [note, setNote] = useState<string>(
+    expenseToEdit 
+      ? expenseToEdit.note 
+      : (initialPrefill?.note || '')
+  );
+  const [date, setDate] = useState<string>(
+    expenseToEdit 
+      ? expenseToEdit.date 
+      : (initialPrefill?.date || getLocalYYYYMMDD())
+  );
+  const [paymentMethod, setPaymentMethod] = useState<Expense['paymentMethod']>(
+    expenseToEdit 
+      ? expenseToEdit.paymentMethod 
+      : (initialPrefill?.paymentMethod || 'card')
+  );
   const [errorCode, setErrorCode] = useState<string | null>(null);
   const [showBusinessPopup, setShowBusinessPopup] = useState<boolean>(false);
 

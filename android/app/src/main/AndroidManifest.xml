@@ -22,6 +22,29 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Custom URL Scheme Deep Links for Voice / Shortcuts / Assistant (expensetrack:// and loosebudget://) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="expensetrack" />
+                <data android:scheme="loosebudget" />
+            </intent-filter>
+
+            <!-- Web App Links for https://app.loosebudget.com/add and /transaction -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="app.loosebudget.com" android:pathPrefix="/add" />
+                <data android:scheme="https" android:host="app.loosebudget.com" android:pathPrefix="/transaction" />
+            </intent-filter>
+
+            <!-- Google Assistant App Actions & Launcher Shortcuts -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+
         </activity>
 
         <provider

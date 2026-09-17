@@ -3,5 +3,7 @@
     <string name="app_name">LooseBudget</string>
     <string name="title_activity_main">LooseBudget</string>
     <string name="package_name">com.loosebudget.app</string>
-    <string name="custom_url_scheme">com.loosebudget.app</string>
+    <string name="custom_url_scheme">expensetrack</string>
+    <string name="shortcut_add_expense_short">Add Expense</string>
+    <string name="shortcut_add_expense_long">Log a new expense or voice transaction</string>
 </resources>
